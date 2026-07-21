@@ -13,7 +13,7 @@ An extensible Windows toolbox and unified launcher for Nintendo Switch utilities
 
 ## Quick Start
 
-Download a source archive from the [latest release](https://github.com/Lili679280/nx-toolbox/releases/latest), or clone and run the toolbox directly:
+Download `nx-toolbox-v1.0.0.exe` from the [latest release](https://github.com/Lili679280/nx-toolbox/releases/latest), or clone and run the toolbox directly:
 
 ```powershell
 git clone https://github.com/Lili679280/nx-toolbox.git
@@ -22,6 +22,8 @@ python nx_toolbox.py
 ```
 
 Python 3.11 or later is recommended. Tkinter is included with the standard Windows Python installer. The optional `windnd` package enables drag-and-drop support in compatible modules.
+
+Release executables are currently unsigned. Verify the SHA-256 value published on the Release page before running a downloaded file.
 
 ## Why nx-toolbox Exists
 

@@ -13,7 +13,7 @@
 
 ## 快速开始
 
-从[最新 Release](https://github.com/Lili679280/nx-toolbox/releases/latest)下载源码压缩包，或者克隆仓库后直接运行：
+从[最新 Release](https://github.com/Lili679280/nx-toolbox/releases/latest)下载 `nx-toolbox-v1.0.0.exe`，或者克隆仓库后直接运行：
 
 ```powershell
 git clone https://github.com/Lili679280/nx-toolbox.git
@@ -22,6 +22,8 @@ python nx_toolbox.py
 ```
 
 建议使用 Python 3.11 或更高版本。Windows 官方 Python 安装程序通常已包含 Tkinter；可选的 `windnd` 包可为兼容模块提供拖放支持。
+
+当前发布的 EXE 尚未进行代码签名。运行下载文件前，请核对 Release 页面公布的 SHA-256。
 
 ## 为什么需要 nx-toolbox
 
