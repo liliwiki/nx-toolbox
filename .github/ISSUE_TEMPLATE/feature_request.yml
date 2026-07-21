@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a new tool, workflow, safety improvement, or integration.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: Describe the Switch-related task and who needs it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed tool or change
+      description: Explain the expected inputs, output, and user workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Data and safety impact
+      description: Explain whether the feature reads, deletes, overwrites, downloads, extracts, or installs files.
+    validations:
+      required: true
+  - type: input
+    id: upstream
+    attributes:
+      label: Relevant upstream source
+      description: Link to authoritative documentation or the upstream project when available.

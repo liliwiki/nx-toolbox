@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a toolbox, module, update, build, or documentation problem.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Do not include console keys, credentials, personal saves, device identifiers, or private SD-card data.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Toolbox launcher
+        - SD Card Package Tool
+        - Snapshot or restore
+        - Package or firmware installation
+        - Application update
+        - Build or packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: nx-toolbox version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem description
+      description: Explain what happened and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest non-destructive sequence that reproduces the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Relevant output
+      description: Paste only non-sensitive logs or error messages.
+      render: text
