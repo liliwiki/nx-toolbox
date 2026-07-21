@@ -1,0 +1,34 @@
+# Private project notes
+/NS工具箱项目总结.md
+
+# Build output
+/out/
+/build/
+/dist/
+/*.spec
+
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Runtime and local data
+*.log
+*.tmp
+*.bak
+*.old
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Internal planning documents
+/docs/superpowers/
