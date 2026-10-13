@@ -14,7 +14,7 @@ Nintendo Switch 维护工具。一个启动器加上若干独立的工具，目�
 
 ## 下载
 
-在 [Releases](https://github.com/Lili679280/nx-toolbox/releases) 页面下载 `NXToolbox-<版本>-setup.exe`，双击即可使用。它第一次运行时会把程序解压到 `%LOCALAPPDATA%\Programs\NXToolbox`，之后只负责启动。
+在 [Releases](https://github.com/Lili679280/nx-toolbox/releases) 页面下载 `NXToolbox-<版本>.exe`，双击即可使用。它第一次运行时会把程序解压到 `%LOCALAPPDATA%\Programs\NXToolbox`，之后只负责启动。
 
 需要 Windows 10 或 11，以及 WebView2 运行时（Windows 11 已内置）。程序没有代码签名，运行前请核对 Release 页面公布的 SHA-256。
 

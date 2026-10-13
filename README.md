@@ -14,7 +14,7 @@ Maintenance tools for Nintendo Switch. A launcher plus independent tools; the pa
 
 ## Download
 
-Get `NXToolbox-<version>-setup.exe` from the [Releases](https://github.com/Lili679280/nx-toolbox/releases) page and run it. On first run it unpacks the program into `%LOCALAPPDATA%\Programs\NXToolbox`; after that it only starts it.
+Get `NXToolbox-<version>.exe` from the [Releases](https://github.com/Lili679280/nx-toolbox/releases) page and run it. On first run it unpacks the program into `%LOCALAPPDATA%\Programs\NXToolbox`; after that it only starts it.
 
 Requires Windows 10 or 11 with the WebView2 runtime (built into Windows 11). The executable is unsigned. Verify the SHA-256 published on the Release page before running it.
 

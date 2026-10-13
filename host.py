@@ -2,7 +2,6 @@
 
     NXToolbox.exe                 启动器
     NXToolbox.exe run <工具id>    某个工具，独立进程、独立窗口
-    NXToolbox.exe apply-update    更新时由新版程序调用，替换安装目录里的旧文件
     python host.py dev <工具id>   开发用：在浏览器里跑这个工具的页面（launcher 表示启动器）
 """
 
@@ -27,7 +26,7 @@ BASE = Path(sys.executable).parent if FROZEN else Path(__file__).resolve().paren
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from nxhost import shared, update, version
+from nxhost import procs, shared, update, version
 from nxhost.api import BaseApi, Context
 from nxhost.detect import PROGRAMS, detect
 
@@ -83,7 +82,7 @@ class LauncherApi(BaseApi):
         super().__init__(ctx)
         self._update_info: dict | None = None
         self._update = {"state": "idle", "frac": 0.0, "detail": "", "error": ""}
-        self._staged: Path | None = None
+        self._installer: Path | None = None
 
     # ---- 在线更新 ----
 
@@ -95,7 +94,7 @@ class LauncherApi(BaseApi):
         return {k: self._update_info[k] for k in ("current", "latest", "newer", "notes", "date", "size")}
 
     def start_update(self) -> dict:
-        """后台下载并解压新版，页面用 update_progress 跟进。"""
+        """后台下载新版，页面用 update_progress 跟进。"""
         if not FROZEN:
             return {"error": "源码方式运行时不能更新"}
         if self._update_info is None or not self._update_info["newer"]:
@@ -110,7 +109,7 @@ class LauncherApi(BaseApi):
                 def progress(done: int, total: int) -> None:
                     self._update.update(frac=done / total if total else 0.0,
                                         detail=f"{done / 1048576:.1f} / {total / 1048576:.1f} MB")
-                self._staged = update.stage(update.download(info, progress))
+                self._installer = update.download(info, progress)
                 self._update.update(state="ready", frac=1.0)
             except Exception as exc:
                 self._update.update(state="error", error=str(exc))
@@ -123,11 +122,11 @@ class LauncherApi(BaseApi):
 
     def apply_update(self) -> dict:
         """关掉自己，让新版来替换文件。别的工具窗口还开着就先不动。"""
-        if self._update["state"] != "ready" or self._staged is None:
+        if self._update["state"] != "ready" or self._installer is None:
             return {"error": "更新还没有准备好"}
-        if update.running_from(BASE):
+        if procs.running_from(BASE):
             return {"error": "还有工具窗口开着。请先把它们关掉，再点一次。"}
-        update.launch_applier(self._staged, BASE)
+        update.launch_installer(self._installer, BASE)
         if self._window is not None:
             threading.Timer(0.2, self._window.destroy).start()
         return {"ok": True}
@@ -200,17 +199,12 @@ def load_tool_api(tool: dict, ctx: Context) -> BaseApi:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", nargs="?", default="launcher", choices=["launcher", "run", "dev", "apply-update"])
+    parser.add_argument("cmd", nargs="?", default="launcher", choices=["launcher", "run", "dev"])
     parser.add_argument("tool", nargs="?")
     parser.add_argument("--t0", type=float, help="启动器点下按钮的时刻，用来量启动耗时")
     parser.add_argument("--selftest", help="窗口就绪后把耗时写进这个文件并退出")
     parser.add_argument("--port", type=int, default=DEV_PORT)
-    parser.add_argument("--target", help="apply-update：要更新的安装目录")
     args = parser.parse_args()
-
-    if args.cmd == "apply-update":
-        update.apply(Path(args.target), BASE)
-        return
 
     ctx = Context(base=BASE, frozen=FROZEN, process_t0=T0, click_t0=args.t0, selftest=args.selftest)
     if args.tool and args.tool != "launcher":
@@ -222,7 +216,7 @@ def main() -> None:
         title, page, size = tool["name"], Path(tool["dir"]) / "index.html", tuple(tool.get("window", TOOL_SIZE))
     else:
         if args.cmd == "launcher" and FROZEN:
-            update.cleanup(BASE)
+            update.cleanup()
         api = LauncherApi(ctx)
         title, page, size = "NS 工具箱", BASE / "launcher" / "index.html", LAUNCHER_SIZE
 
