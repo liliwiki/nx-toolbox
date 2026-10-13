@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>安装 NS 工具箱</title>
+<style>/*BASE_CSS*/
+.wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:28px 34px;text-align:center}
+.wrap>*{animation:rise .5s var(--ease) both}
+.wrap>*:nth-child(2){animation-delay:.05s}.wrap>*:nth-child(3){animation-delay:.1s}.wrap>*:nth-child(n+4){animation-delay:.15s}
+.logo{width:84px;height:84px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px #0000002e)}
+.opts{width:100%;text-align:left}
+.opts .li>div:first-of-type{min-width:0}
+.where{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere;user-select:text}
+.act{width:100%;display:grid;gap:10px;justify-items:center;min-height:74px;align-content:center}
+.act .pbar{width:100%}
+.okmark{width:52px;height:52px;color:var(--green)}
+.okmark circle{stroke-dasharray:164;stroke-dashoffset:164;animation:draw .7s var(--ease) .1s forwards}
+.okmark path{stroke-dasharray:40;stroke-dashoffset:40;animation:draw .4s var(--ease) .6s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap"></div>
+<script>/*BASE_JS*/</script>
+<script>
+let api, info;
+const S = { dir: '', desktop: true, startmenu: true };
+const POLL_MS = 150;
+
+function paint() {
+  const updating = !!info.existing;
+  $('#wrap').innerHTML = `<img class="logo" src="${info.icon}" alt="">
+    <div><h2>${updating ? '更新' : '安装'} NS 工具箱</h2><p class="lead" style="margin-top:4px">版本 ${esc(info.version)}${updating && info.existing.version ? `，现在装的是 ${esc(info.existing.version)}` : ''}</p></div>
+    <div class="card opts">
+      <div class="li"><div><strong>安装位置</strong><span class="where" id="where">${esc(S.dir)}</span></div>${updating ? '' : '<button class="btn" id="browse">更改…</button>'}</div>
+      <div class="li"><div><strong>桌面快捷方式</strong></div><button class="sw" role="switch" aria-checked="${S.desktop}" data-k="desktop" aria-label="桌面快捷方式"></button></div>
+      <div class="li"><div><strong>开始菜单快捷方式</strong></div><button class="sw" role="switch" aria-checked="${S.startmenu}" data-k="startmenu" aria-label="开始菜单快捷方式"></button></div>
+    </div>
+    <div class="act" id="act"><button class="btn pri big" id="go">${updating ? '更新' : '安装'}</button><p class="small faint">只安装给当前用户，不需要管理员权限。</p></div>`;
+  if ($('#browse')) $('#browse').onclick = async () => { const r = await api.browse(); if (r.dir) { S.dir = r.dir; $('#where').textContent = r.dir; } };
+  $$('.sw').forEach(b => b.onclick = () => { S[b.dataset.k] = !S[b.dataset.k]; b.setAttribute('aria-checked', S[b.dataset.k]); });
+  $('#go').onclick = run;
+}
+
+async function run() {
+  const r = await api.start(S.dir, S.desktop, S.startmenu);
+  if (r.error) { tell('不能装到这里', esc(r.error)); return; }
+  $$('.opts button').forEach(b => b.disabled = true);
+  $('#act').innerHTML = `<div class="pbar"><b id="bar"></b></div><p class="small muted" id="note">正在安装…</p>`;
+  let state;
+  for (;;) {
+    state = await api.progress();
+    $('#bar').style.transform = `scaleX(${state.frac})`;
+    if (state.state !== 'installing') break;
+    await sleep(POLL_MS);
+  }
+  if (state.state === 'error') { await tell('没有装好', esc(state.error)); paint(); return; }
+  $('#wrap').innerHTML = `<svg class="okmark" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="28" cy="28" r="26" transform="rotate(-90 28 28)"/><path d="m18 29 7 7 14-15"/></svg>
+    <div><h2>已经装好了</h2><p class="lead" style="margin-top:4px">以后从${S.desktop ? '桌面' : S.startmenu ? '开始菜单' : '安装位置'}打开。要卸载的话，再运行一次这个安装程序，或者在系统设置的「已安装的应用」里找 NS 工具箱。</p></div>
+    <div class="row" style="justify-content:center"><button class="btn pri big" id="open">打开 NS 工具箱</button><button class="btn big" id="close">关闭</button></div>`;
+  $('#open').onclick = () => api.finish(true);
+  $('#close').onclick = () => api.finish(false);
+}
+
+window.addEventListener('pywebviewready', async () => {
+  api = window.pywebview.api;
+  const ready = await api.ready();
+  applyTheme(ready.settings.theme);
+  info = await api.info();
+  Object.assign(S, { dir: info.dir, desktop: info.desktop, startmenu: info.startmenu });
+  paint();
+});
+</script>
+</body>
+</html>

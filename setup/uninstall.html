@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>卸载 NS 工具箱</title>
+<style>/*BASE_CSS*/
+.wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:28px 34px;text-align:center}
+.wrap>*{animation:rise .5s var(--ease) both}
+.wrap>*:nth-child(2){animation-delay:.05s}.wrap>*:nth-child(n+3){animation-delay:.1s}
+.logo{width:84px;height:84px;image-rendering:pixelated;filter:drop-shadow(0 8px 14px #0000002e)}
+.opts{width:100%;text-align:left}
+.where{font-family:var(--mono);font-size:12px;color:var(--muted);overflow-wrap:anywhere;user-select:text}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap"></div>
+<script>/*BASE_JS*/</script>
+<script>
+let api, info, removeData = false;
+
+function paint() {
+  $('#wrap').innerHTML = `<img class="logo" src="${info.icon}" alt="">
+    <div><h2>${info.manage ? 'NS 工具箱已经装好了' : '卸载 NS 工具箱'}</h2><p class="lead" style="margin-top:4px">版本 ${esc(info.version)}${info.manage ? '。平时从快捷方式打开就行，不需要再运行这个安装程序' : ''}</p></div>
+    <div class="card opts">
+      <div class="li"><div><strong>安装位置</strong><span class="where">${esc(info.dir)}</span></div></div>
+      <div class="li"><div><strong>同时删除我的数据</strong><span class="d">设置、快照、日志和下载的固件。不勾的话它们会留着，重新安装后还能用</span></div><button class="sw" role="switch" aria-checked="false" id="data" aria-label="同时删除我的数据"></button></div>
+    </div>
+    <div class="row" style="justify-content:center">${info.manage ? '<button class="btn pri big" id="open">打开 NS 工具箱</button>' : '<button class="btn big" id="cancel">取消</button>'}<button class="btn red big" id="go">卸载</button></div>`;
+  $('#data').onclick = e => { removeData = !removeData; e.currentTarget.setAttribute('aria-checked', removeData); };
+  if ($('#cancel')) $('#cancel').onclick = () => api.finish();
+  if ($('#open')) $('#open').onclick = () => api.open();
+  $('#go').onclick = run;
+}
+
+async function run() {
+  const r = await api.start(removeData);
+  if (r.error) { tell('现在卸载不了', esc(r.error)); return; }
+  $('#wrap').innerHTML = `<div><h2>已经卸载</h2><p class="lead" style="margin-top:4px">程序文件会在这个窗口关闭后删除。${removeData ? '' : '你的数据还留着。'}</p></div><button class="btn pri big" id="close">关闭</button>`;
+  $('#close').onclick = () => api.finish();
+}
+
+window.addEventListener('pywebviewready', async () => {
+  api = window.pywebview.api;
+  const ready = await api.ready();
+  applyTheme(ready.settings.theme);
+  info = await api.info();
+  paint();
+});
+</script>
+</body>
+</html>

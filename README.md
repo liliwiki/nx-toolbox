@@ -14,7 +14,7 @@ Maintenance tools for Nintendo Switch. A launcher plus independent tools; the pa
 
 ## Download
 
-Get `NXToolbox-<version>.exe` from the [Releases](https://github.com/Lili679280/nx-toolbox/releases) page and run it. On first run it unpacks the program into `%LOCALAPPDATA%\Programs\NXToolbox`; after that it only starts it.
+Get `NXToolbox-<version>.exe` from the [Releases](https://github.com/Lili679280/nx-toolbox/releases) page and run it to install. You can choose the install location and shortcuts; it installs for the current user only and does not need administrator rights. To uninstall, run the installer again or use "Installed apps" in Windows Settings.
 
 Requires Windows 10 or 11 with the WebView2 runtime (built into Windows 11). The executable is unsigned. Verify the SHA-256 published on the Release page before running it.
 
@@ -50,6 +50,7 @@ Do not post console keys, certificates, saves, or device identifiers in public i
 ```text
 host.py            Host: one program that starts as the launcher or as a tool
 bootstrap.py       Single-file installer
+setup/             Install and uninstall screens
 nxhost/            Shared by the launcher and tools (settings, log, update, program detection)
 launcher/          Launcher page
 ui/                Shared styles and scripts

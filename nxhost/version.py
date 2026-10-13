@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 APP_FILE = "app.json"
+INTERNAL = "_internal"      # 打包后除了 exe 以外的东西都在这个文件夹里
 _RELEASE = 1      # 正式版排在同号的预览版后面：2.0.0-preview.9 < 2.0.0
 
 
@@ -28,8 +29,13 @@ def newer(candidate: str, current: str) -> bool:
 
 
 def read(folder: Path) -> dict:
-    """读程序文件夹里的 app.json；没有或读不了就当作没安装。"""
-    try:
-        return json.loads(Path(folder, APP_FILE).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    """读程序文件夹里的 app.json；没有或读不了就当作没安装。
+
+    安装好的程序放在 _internal 里；源码目录和早期的预览版直接放在文件夹里。
+    """
+    for path in (Path(folder, INTERNAL, APP_FILE), Path(folder, APP_FILE)):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+    return {}

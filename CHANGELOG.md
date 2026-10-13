@@ -15,7 +15,7 @@ A rewrite. Preview release.
 - New interface built on pywebview and WebView2, replacing the Tkinter launcher and wizard.
 - The launcher and each tool now run as separate processes from one program.
 - Swap rules reduced to three: manual choices, then the blacklist, then the whitelist; everything else is removed before the new package is installed.
-- Distributed as a single-file installer that unpacks into `%LOCALAPPDATA%\Programs\NXToolbox`.
+- Distributed as a single-file installer: choose the location and shortcuts, per-user install without administrator rights, uninstall from Windows Settings or by running the installer again.
 
 ### Added
 

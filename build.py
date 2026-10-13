@@ -26,7 +26,9 @@ DIST = ROOT / "dist" / "NXToolbox"
 EXE = DIST / "NXToolbox.exe"
 RELEASE = ROOT / "release"
 WORK = ROOT / "build"
-OUTSIDE = ("launcher", "ui", "tools", "app.json")   # 不打进 exe，放在旁边，之后可以单独替换
+ICON = ROOT / "icon.ico"
+INTERNAL = DIST / "_internal"
+BUNDLED = ("launcher", "setup", "ui", "tools")   # 界面和工具，放进 _internal，安装文件夹里只剩 exe 和 _internal
 DOWNLOAD_URL = "https://download.liliwiki.com/toolbox/nx-toolbox.exe"   # 下载站上固定用这个名字
 SELFTEST_TIMEOUT = 60
 RUNS = 3
@@ -48,17 +50,13 @@ def pyinstaller(*args: str) -> None:
 def build_app() -> None:
     names = sorted(n for n in sys.stdlib_module_names if n not in STDLIB_SKIP and not n.startswith("_"))
     stdlib = [arg for name in names for arg in ("--hidden-import", name, "--collect-submodules", name)]
-    pyinstaller("--onedir", "--name", "NXToolbox", "--distpath", str(ROOT / "dist"), *stdlib, str(ROOT / "host.py"))
-    for name in OUTSIDE:
-        source, target = ROOT / name, DIST / name
-        if source.is_dir():
-            shutil.rmtree(target, ignore_errors=True)
-            shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__"))
-        else:
-            shutil.copy2(source, target)
+    pyinstaller("--onedir", "--name", "NXToolbox", "--icon", str(ICON), "--distpath", str(ROOT / "dist"),
+                "--exclude-module", "tkinter", *stdlib, str(ROOT / "host.py"))
+    for name in BUNDLED:
+        shutil.copytree(ROOT / name, INTERNAL / name, ignore=shutil.ignore_patterns("__pycache__"))
     # 同一个版本号可能重新打包，留一个打包时间让安装程序分得出来
     stamped = {**APP, "build": time.strftime("%Y%m%d%H%M%S")}
-    (DIST / "app.json").write_text(json.dumps(stamped, ensure_ascii=False, indent=2), encoding="utf-8")
+    (INTERNAL / "app.json").write_text(json.dumps(stamped, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def build_payload() -> Path:
@@ -75,8 +73,8 @@ def build_payload() -> Path:
 def build_setup(payload: Path) -> Path:
     shutil.rmtree(RELEASE, ignore_errors=True)
     RELEASE.mkdir()
-    pyinstaller("--onefile", "--name", SETUP_NAME.removesuffix(".exe"), "--distpath", str(RELEASE),
-                "--add-data", f"{payload};.", "--add-data", f"{DIST / 'app.json'};.", str(ROOT / "bootstrap.py"))
+    pyinstaller("--onefile", "--name", SETUP_NAME.removesuffix(".exe"), "--icon", str(ICON), "--distpath", str(RELEASE),
+                "--add-data", f"{payload};.", "--add-data", f"{INTERNAL / 'app.json'};.", str(ROOT / "bootstrap.py"))
     return RELEASE / SETUP_NAME
 
 

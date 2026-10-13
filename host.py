@@ -2,6 +2,8 @@
 
     NXToolbox.exe                 启动器
     NXToolbox.exe run <工具id>    某个工具，独立进程、独立窗口
+    NXToolbox.exe setup           安装界面，由安装程序解压后调用
+    NXToolbox.exe uninstall       卸载界面，系统的"已安装的应用"里点卸载时调用
     python host.py dev <工具id>   开发用：在浏览器里跑这个工具的页面（launcher 表示启动器）
 """
 
@@ -12,21 +14,25 @@ import time
 T0 = time.perf_counter()
 
 import argparse
+import base64
 import ctypes
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
 from pathlib import Path
 
 FROZEN = getattr(sys, "frozen", False)
-BASE = Path(sys.executable).parent if FROZEN else Path(__file__).resolve().parent
+SOURCE_DIR = Path(__file__).resolve().parent
+HOME = Path(sys.executable).parent if FROZEN else SOURCE_DIR      # 安装文件夹：NXToolbox.exe 所在的位置
+BASE = Path(getattr(sys, "_MEIPASS", SOURCE_DIR))                 # 界面、工具、app.json 所在的位置（打包后是 _internal）
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from nxhost import procs, shared, update, version
+from nxhost import install, procs, shared, update, version
 from nxhost.api import BaseApi, Context
 from nxhost.detect import PROGRAMS, detect
 
@@ -35,7 +41,7 @@ TOOLS_DIR = BASE / "tools"
 SW_SHOWNORMAL = 1
 ERROR_ACCESS_DENIED = 5
 DEV_PORT = 8770
-LAUNCHER_SIZE, TOOL_SIZE = (800, 700), (1060, 780)
+LAUNCHER_SIZE, TOOL_SIZE, SETUP_SIZE = (800, 700), (1060, 780), (560, 640)
 
 
 def host_cmd(*args: str) -> list[str]:
@@ -124,9 +130,9 @@ class LauncherApi(BaseApi):
         """关掉自己，让新版来替换文件。别的工具窗口还开着就先不动。"""
         if self._update["state"] != "ready" or self._installer is None:
             return {"error": "更新还没有准备好"}
-        if procs.running_from(BASE):
+        if procs.running_from(HOME):
             return {"error": "还有工具窗口开着。请先把它们关掉，再点一次。"}
-        update.launch_installer(self._installer, BASE)
+        update.launch_installer(self._installer, HOME)
         if self._window is not None:
             threading.Timer(0.2, self._window.destroy).start()
         return {"ok": True}
@@ -146,12 +152,12 @@ class LauncherApi(BaseApi):
         if tool.get("admin") and not shared.is_admin():
             # 只给这一个工具提权，启动器自己保持普通权限
             code = ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", cmd[0], subprocess.list2cmdline(cmd[1:]), str(BASE), SW_SHOWNORMAL)
+                None, "runas", cmd[0], subprocess.list2cmdline(cmd[1:]), str(HOME), SW_SHOWNORMAL)
             if code <= 32:
                 denied = code == ERROR_ACCESS_DENIED
                 return {"ok": False, "error": "没有获得管理员权限" if denied else f"启动失败（{code}）"}
             return {"ok": True, "elevated": True}
-        subprocess.Popen(cmd, cwd=BASE)
+        subprocess.Popen(cmd, cwd=HOME)
         return {"ok": True, "elevated": False}
 
     def is_ready(self, tool_id: str, since: float) -> bool:
@@ -188,6 +194,94 @@ class LauncherApi(BaseApi):
         return []
 
 
+def _icon_uri() -> str:
+    data = (BASE / "ui" / "icon.png").read_bytes()
+    return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+
+class SetupApi(BaseApi):
+    """安装界面。source 是安装程序解压出来的新版文件夹，也就是当前程序自己所在的位置。"""
+
+    def __init__(self, ctx: Context, source: Path) -> None:
+        super().__init__(ctx)
+        self._source = source
+        self._target: Path | None = None
+        self._state = {"state": "idle", "frac": 0.0, "error": ""}
+
+    def info(self) -> dict:
+        existing = install.installed()
+        return {"version": VERSION, "existing": existing, "icon": _icon_uri(),
+                "dir": existing["dir"] if existing else str(install.default_dir()),
+                "desktop": existing["desktop"] if existing else True,
+                "startmenu": existing["startmenu"] if existing else True}
+
+    def browse(self) -> dict:
+        if self._window is None:
+            return {"cancelled": True}
+        import webview
+        picked = self._window.create_file_dialog(webview.FileDialog.FOLDER)
+        return {"dir": str(install.normalize_target(picked[0]))} if picked else {"cancelled": True}
+
+    def start(self, folder: str, desktop: bool, startmenu: bool) -> dict:
+        target = Path(folder)
+        reason = install.check_target(target)
+        if reason:
+            return {"error": reason}
+        self._target = target
+        self._state = {"state": "installing", "frac": 0.0, "error": ""}
+
+        def work() -> None:
+            try:
+                install.install(self._source, target, bool(desktop), bool(startmenu),
+                                lambda frac: self._state.update(frac=frac))
+                self._state.update(state="done", frac=1.0)
+            except Exception as exc:
+                self._state.update(state="error", error=str(exc))
+
+        threading.Thread(target=work, daemon=True).start()
+        return {"ok": True}
+
+    def progress(self) -> dict:
+        return dict(self._state)
+
+    def finish(self, launch: bool) -> dict:
+        if launch and self._target is not None:
+            subprocess.Popen([str(self._target / procs.EXE_NAME)], cwd=self._target)
+        if self._window is not None:
+            threading.Timer(0.2, self._window.destroy).start()
+        return {"ok": True}
+
+
+class UninstallApi(BaseApi):
+    """卸载界面。manage 表示是双击安装程序进来的（已经装好了），这时多给一个"打开"。"""
+
+    def __init__(self, ctx: Context, manage: bool) -> None:
+        super().__init__(ctx)
+        self._manage = manage
+
+    def info(self) -> dict:
+        return {"version": VERSION, "dir": str(HOME), "data_dir": str(shared.LEGACY_DIR), "icon": _icon_uri(),
+                "manage": self._manage}
+
+    def open(self) -> dict:
+        subprocess.Popen([str(HOME / procs.EXE_NAME)], cwd=HOME)
+        return self.finish()
+
+    def start(self, remove_data: bool) -> dict:
+        if procs.running_from(HOME):
+            return {"error": "NS 工具箱还有窗口开着，请先全部关掉"}
+        install.unregister()
+        if remove_data:
+            shutil.rmtree(shared.LEGACY_DIR, ignore_errors=True)
+        install.remove_folder_after_exit(HOME)
+        return {"ok": True}
+
+    def finish(self) -> dict:
+        if self._window is not None:
+            threading.Timer(0.2, self._window.destroy).start()
+        return {"ok": True}
+
+
 def load_tool_api(tool: dict, ctx: Context) -> BaseApi:
     """工具代码放在程序外面的 tools 文件夹里，运行时再加载。"""
     sys.path.insert(0, tool["dir"])
@@ -199,15 +293,24 @@ def load_tool_api(tool: dict, ctx: Context) -> BaseApi:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", nargs="?", default="launcher", choices=["launcher", "run", "dev"])
+    parser.add_argument("cmd", nargs="?", default="launcher", choices=["launcher", "run", "dev", "setup", "uninstall"])
     parser.add_argument("tool", nargs="?")
     parser.add_argument("--t0", type=float, help="启动器点下按钮的时刻，用来量启动耗时")
     parser.add_argument("--selftest", help="窗口就绪后把耗时写进这个文件并退出")
     parser.add_argument("--port", type=int, default=DEV_PORT)
+    parser.add_argument("--source", help="setup：新版文件所在的文件夹")
+    parser.add_argument("--manage", action="store_true", help="uninstall：从安装程序进来的，多给一个打开按钮")
     args = parser.parse_args()
 
     ctx = Context(base=BASE, frozen=FROZEN, process_t0=T0, click_t0=args.t0, selftest=args.selftest)
-    if args.tool and args.tool != "launcher":
+    screen = args.cmd if args.cmd in ("setup", "uninstall") else args.tool if args.tool in ("setup", "uninstall") else None
+    if screen == "setup":
+        api = SetupApi(ctx, Path(args.source) if args.source else HOME)
+        title, page, size = f"安装 {install.APP_NAME}", BASE / "setup" / "index.html", SETUP_SIZE
+    elif screen == "uninstall":
+        api = UninstallApi(ctx, args.manage)
+        title, page, size = install.APP_NAME if args.manage else f"卸载 {install.APP_NAME}", BASE / "setup" / "uninstall.html", SETUP_SIZE
+    elif args.tool and args.tool != "launcher":
         tool = next((t for t in read_tools() if t["id"] == args.tool and t["ready"]), None)
         if tool is None:
             sys.exit(f"没有这个工具：{args.tool}")
@@ -232,7 +335,7 @@ def main() -> None:
     dark = shared.load_settings().get("theme") == "dark"
     window = webview.create_window(
         title, html=render_page(page), js_api=api,
-        width=size[0], height=size[1], min_size=(620, 480),
+        width=size[0], height=size[1], min_size=(min(620, size[0]), 480),
         background_color="#000000" if dark else "#f5f5f7")
     api._window = window
     webview.start(gui="edgechromium")

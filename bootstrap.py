@@ -1,75 +1,82 @@
-"""单文件安装程序：对外发布的就是这一个 exe。
+"""安装程序：对外发布的就是这一个 exe，它自带新版的全部文件。
 
-它自带新版的全部文件。第一次运行、或者自带的比已安装的新时，解压到安装目录；
-之后每次运行只是启动已经装好的程序，所以启动速度和直接运行一样。
-在线更新也是下载它：带 --install-to 运行时，它等旧程序退出，把那个目录换成新版再启动。
-1.0 的更新器会把它改名成 NS工具箱.exe 放在原来的位置，用起来和以前一样双击就行。
+- 没装过，或者自带的比已装的新：打开安装界面（选位置、快捷方式），装好后可以从系统设置里卸载。
+- 已经装好了同一个版本：打开装好的程序的卸载界面（上面也能直接打开工具箱）。平时用快捷方式打开。
+- 带 --install-to 运行：在线更新用，不显示界面，等旧程序退出后把那个目录换成新版再启动。
+
+1.0 的更新器会把它改名成 NS工具箱.exe 放在原来的位置，所以装好之后再双击它，界面上也要有打开工具箱的按钮。
 """
 
 from __future__ import annotations
 
 import argparse
 import ctypes
-import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
-from nxhost import procs, version
+from nxhost import install, procs, version
 
-INSTALL_ENV = "NXTOOLBOX_INSTALL_DIR"      # 测试时装到别处
-DEFAULT_DIR = Path(os.environ.get(INSTALL_ENV)
-                   or Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "Programs" / "NXToolbox")
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 PAYLOAD = "payload.zip"
-WAIT_SECONDS = 20
 MB_ICONERROR = 0x10
 
 
-def needs_install(target: Path) -> bool:
+def is_current(target: Path) -> bool:
+    """装好的这一份是不是和自带的一样新（同版本号、同一次打包）。"""
     installed, bundled = version.read(target), version.read(BUNDLE_DIR)
     if not installed.get("version") or not (target / procs.EXE_NAME).is_file():
-        return True
+        return False
     if version.newer(bundled.get("version", "0"), installed["version"]):
-        return True
-    # 同一个版本号重新打过包，也换成自带的这一份
-    return bundled.get("version") == installed["version"] and bundled.get("build") != installed.get("build")
+        return False
+    return not (bundled.get("version") == installed["version"] and bundled.get("build") != installed.get("build"))
 
 
-def install(target: Path) -> None:
-    """先解压到旁边的临时文件夹，成功后再整个换过去，中途失败不会留下半截的安装。"""
-    staging = target.with_name(target.name + ".new")
-    retired = target.with_name(target.name + ".old")
-    shutil.rmtree(staging, ignore_errors=True)
-    shutil.rmtree(retired, ignore_errors=True)
-    staging.parent.mkdir(parents=True, exist_ok=True)
+def unpack() -> Path:
+    folder = Path(tempfile.mkdtemp(prefix="NXToolboxSetup-"))
     with zipfile.ZipFile(BUNDLE_DIR / PAYLOAD) as bundle:
-        bundle.extractall(staging)
-    if target.exists():
-        os.replace(target, retired)      # 旧版还开着的话这里会失败，旧版原样不动
-    os.replace(staging, target)
-    shutil.rmtree(retired, ignore_errors=True)
+        bundle.extractall(folder)
+    return folder
+
+
+def silent_update(target: Path, passthrough: list[str]) -> None:
+    """在线更新：不问任何问题，保持原来的快捷方式设置。"""
+    source = unpack()
+    try:
+        existing = install.installed() or {}
+        install.install(source, target, existing.get("desktop", True), existing.get("startmenu", True), lambda _f: None)
+    except OSError as exc:
+        ctypes.windll.user32.MessageBoxW(
+            None, f"更新没有完成：{exc}\n\n原来的版本没有被改动，可以照常使用。", install.APP_NAME, MB_ICONERROR)
+    finally:
+        shutil.rmtree(source, ignore_errors=True)
+    if (target / procs.EXE_NAME).is_file():
+        subprocess.Popen([str(target / procs.EXE_NAME), *passthrough], cwd=target)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--install-to", help="在线更新：要换成新版的安装目录")
-    parser.add_argument("--wait", action="store_true", help="先等那个目录里的旧程序退出")
+    parser.add_argument("--wait", action="store_true", help="保留给旧版本的调用，现在总是会等旧程序退出")
     args, passthrough = parser.parse_known_args()
-    target = Path(args.install_to) if args.install_to else DEFAULT_DIR
+    if args.install_to:
+        silent_update(Path(args.install_to), passthrough)
+        return
+
+    existing = install.installed()
+    target = Path(existing["dir"]) if existing else install.default_dir()
+    if is_current(target):
+        subprocess.Popen([str(target / procs.EXE_NAME), "uninstall", "--manage"], cwd=target)
+        return
+    # 用解压出来的新程序自己来显示安装界面，装完它会把自己复制到安装位置
+    source = unpack()
     try:
-        if args.wait and not procs.wait_until_closed(target, WAIT_SECONDS):
-            raise OSError("工具箱还有窗口开着")
-        if needs_install(target):
-            install(target)
-    except OSError as exc:
-        ctypes.windll.user32.MessageBoxW(
-            None, f"安装没有完成：{exc}\n\n请把 NS 工具箱的窗口全部关掉再试。原来的版本没有被改动。", "NS 工具箱", MB_ICONERROR)
-        if not (target / procs.EXE_NAME).is_file():
-            return
-    subprocess.Popen([str(target / procs.EXE_NAME), *passthrough], cwd=target)
+        subprocess.run([str(source / procs.EXE_NAME), "setup", "--source", str(source)], cwd=source)
+    finally:
+        shutil.rmtree(source, ignore_errors=True)
 
 
 if __name__ == "__main__":

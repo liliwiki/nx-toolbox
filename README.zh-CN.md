@@ -14,7 +14,7 @@ Nintendo Switch 维护工具。一个启动器加上若干独立的工具，目�
 
 ## 下载
 
-在 [Releases](https://github.com/Lili679280/nx-toolbox/releases) 页面下载 `NXToolbox-<版本>.exe`，双击即可使用。它第一次运行时会把程序解压到 `%LOCALAPPDATA%\Programs\NXToolbox`，之后只负责启动。
+在 [Releases](https://github.com/Lili679280/nx-toolbox/releases) 页面下载 `NXToolbox-<版本>.exe`，双击安装。可以选安装位置和快捷方式，只安装给当前用户，不需要管理员权限；要卸载的话，再运行一次安装程序，或者在系统设置的「已安装的应用」里卸载。
 
 需要 Windows 10 或 11，以及 WebView2 运行时（Windows 11 已内置）。程序没有代码签名，运行前请核对 Release 页面公布的 SHA-256。
 
@@ -50,6 +50,7 @@ Nintendo Switch 维护工具。一个启动器加上若干独立的工具，目�
 ```text
 host.py            宿主：同一个程序按参数启动成启动器或某个工具
 bootstrap.py       单文件安装程序
+setup/             安装和卸载界面
 nxhost/            启动器和工具共用的部分（设置、日志、更新、查找第三方程序）
 launcher/          启动器页面
 ui/                共用的样式和脚本
