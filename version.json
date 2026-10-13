@@ -1,6 +1,0 @@
-{
-  "version": "1.0.0",
-  "download_url": "https://download.liliwiki.com/toolbox/nx-toolbox.exe",
-  "changelog": "v1.0.0 - 初始版本:\n- 复古游戏风格启动器\n- SD卡清理（白名单保护系统）\n- 整合包在线/本地更新\n- 固件在线/本地安装\n- 独立 updater 更新器，安装画面，零残留\n- 1MB大块下载 + 实时速度显示\n- 操作日志与快照管理",
-  "release_date": "2026-06-12"
-}

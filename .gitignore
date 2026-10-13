@@ -5,6 +5,7 @@
 /out/
 /build/
 /dist/
+/release/
 /*.spec
 
 # Python cache and environments

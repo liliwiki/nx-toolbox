@@ -6,12 +6,24 @@ The root MIT License applies only to original nx-toolbox source and documentatio
 
 - Project: 7-Zip
 - Bundled version: 24.09 (x64), released 2024-11-29
-- Files: `7z/7z.exe`, `7z/7z.dll`
+- Files: `tools/swap/bin/7z/7z.exe`, `tools/swap/bin/7z/7z.dll`
 - Source: https://www.7-zip.org/
 - License: GNU LGPL for most code, with BSD-licensed portions and an unRAR license restriction in parts of `7z.dll`
-- License notice: `7z/LICENSE.txt`
+- License notice: `tools/swap/bin/7z/LICENSE.txt`
 
 The bundled executables are used only for archive operations. The 7-Zip license notice must remain with redistributed binary copies.
+
+### Packaged runtime
+
+Release builds are produced with PyInstaller and include the Python runtime and these packages, each under its own license:
+
+- Python (PSF License) - https://www.python.org/
+- pywebview (BSD 3-Clause) - https://github.com/r0x0r/pywebview
+- pythonnet and clr-loader (MIT) - https://github.com/pythonnet/pythonnet
+- bottle, proxy_tools (MIT)
+- Microsoft WebView2 loader, redistributed with pywebview under Microsoft's terms
+
+The WebView2 runtime itself is not bundled; the program uses the one installed on the system.
 
 ### External packages and firmware
 

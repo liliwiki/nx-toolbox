@@ -1,0 +1,9 @@
+{
+  "name": "换包",
+  "desc": "更新大气层整合包",
+  "version": "2.0.0",
+  "icon": "swap",
+  "order": 1,
+  "admin": false,
+  "programs": []
+}

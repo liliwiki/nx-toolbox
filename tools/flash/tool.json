@@ -1,0 +1,9 @@
+{
+  "name": "刷机",
+  "desc": "把系统写入 eMMC 或存储卡",
+  "version": "0.0.0",
+  "icon": "bolt",
+  "order": 3,
+  "admin": true,
+  "programs": []
+}

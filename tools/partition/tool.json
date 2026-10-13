@@ -1,0 +1,9 @@
+{
+  "name": "换区",
+  "desc": "给存储卡重新分区",
+  "version": "0.0.0",
+  "icon": "disk",
+  "order": 2,
+  "admin": true,
+  "programs": ["diskgenius"]
+}

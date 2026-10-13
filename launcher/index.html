@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>NS 工具箱</title>
+<style>/*BASE_CSS*/
+/* 首页：内容少，窗口放大时整体居中并跟着变宽，不留一大片空白 */
+.main{display:flex;flex-direction:column}
+.page{width:100%}
+.page.home{max-width:min(1180px,94vw);margin-block:auto;gap:24px;padding-block:44px}
+.page.home h1{font-size:clamp(32px,3.2vw,48px)}
+.page.home .lead{font-size:clamp(15px,1.2vw,18px)}
+.upd{display:flex;align-items:center;gap:10px;width:100%;padding:11px 16px;border-radius:14px;background:color-mix(in srgb,var(--blue) 12%,transparent);color:var(--link);font-weight:500;text-align:left;transition:background .2s,transform .25s var(--ease)}
+.upd:hover{background:color-mix(in srgb,var(--blue) 18%,transparent)}
+.upd:active{transform:scale(.99)}
+.upd .dot{width:8px;height:8px;border-radius:50%;background:var(--blue)}
+.upd .go{display:inline-flex;align-items:center;gap:2px;font-weight:400}
+.picks{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+.picks .pick{border-top:0;border-radius:16px;background:var(--surface);box-shadow:0 0 0 1px var(--hair);padding:16px 18px;transition:transform .35s var(--ease),box-shadow .3s}
+.picks .pick:hover{background:var(--surface);transform:translateY(-2px);box-shadow:0 0 0 1px var(--line),0 10px 24px #00000014}
+@media (min-width:1200px){.page.home .tile{padding:28px}.page.home .ti{width:80px;height:80px}.page.home .tile strong{font-size:22px}.page.home .tile .d{font-size:15px}}
+</style>
+</head>
+<body>
+<div class="shell solo">
+  <main class="main" id="main">
+    <header class="navbar" id="navbar" hidden><button class="navback" id="back"></button><div class="navtitle" id="navtitle"></div><span></span></header>
+    <div class="page" id="page"></div></main>
+</div>
+<script>/*BASE_JS*/</script>
+<script>
+let api;
+const S = { page: 'home', home: null, theme: 'auto', update: null };
+const VIEW = {};
+const LAUNCH_POLL_MS = 200, LAUNCH_POLLS = 50;
+
+const TITLES = { manage: '工具与组件', logs: '日志', settings: '设置' };
+const SLIDE_OUT = 44, SLIDE_IN = 72, TITLE_HIDDEN_AT = 44;
+let navigating = false;
+
+/* 进下一级：旧页往左退、新页从右推进来；返回时反过来 */
+async function nav(p) {
+  if (p === S.page || navigating) return;
+  navigating = true;
+  const dir = p === 'home' ? -1 : 1;
+  if (!RM) await Promise.race([$('#page').animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-SLIDE_OUT * dir}px)` }], { duration: 150, easing: 'ease-in', fill: 'forwards' }).finished, sleep(200)]);
+  S.page = p; draw(true);
+  if (!RM) {
+    $('#page').animate([{ opacity: 0, transform: `translateX(${SLIDE_IN * dir}px)` }, { opacity: 1, transform: 'none' }], { duration: 460, easing: EASE });
+    if (p !== 'home') $('#navbar').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
+  }
+  $('#main').scrollTop = 0;
+  navigating = false;
+}
+const goBack = () => { if (S.page !== 'home' && !sheetClose) nav('home'); };
+function draw(still) {
+  const old = $('#page'), pg = document.createElement('div'), top = $('#main').scrollTop, home = S.page === 'home';
+  pg.className = 'page' + (still ? ' still' : '') + (home ? ' home' : ''); pg.id = 'page'; old.replaceWith(pg);
+  $('#navbar').hidden = home; $('#navbar').classList.remove('scrolled');
+  $('#back').innerHTML = ic('back', 22) + '工具箱'; $('#back').setAttribute('aria-label', '返回工具箱');
+  $('#navtitle').textContent = TITLES[S.page] || '';
+  VIEW[S.page](pg);
+  $('#main').scrollTop = still ? top : 0;
+}
+
+/* ---------- 首页 ---------- */
+VIEW.home = async pg => {
+  pg.innerHTML = `${S.update && S.update.newer ? `<button class="upd" id="upd"><span class="dot"></span><span>有新版本 ${esc(S.update.latest)}</span><span class="sp"></span><span class="go">查看${ic('chev', 14)}</span></button>` : ''}
+    <div><h1>NS 工具箱</h1><p class="lead" style="margin-top:6px">Nintendo Switch 维护工具</p></div><div class="tiles" id="tiles"></div>
+    <div class="sec">管理</div>
+    <div class="picks">
+      <button class="pick" data-p="manage"><span class="gi">${ic('grid', 17)}</span><div style="flex:1"><strong style="font-weight:500">工具与组件</strong><div class="small muted">工具、第三方程序、存储空间</div></div>${ic('chev', 16)}</button>
+      <button class="pick" data-p="logs"><span class="gi">${ic('list', 17)}</span><div style="flex:1"><strong style="font-weight:500">日志</strong><div class="small muted" id="logn"></div></div>${ic('chev', 16)}</button>
+      <button class="pick" data-p="settings"><span class="gi">${ic('gear', 17)}</span><div style="flex:1"><strong style="font-weight:500">设置</strong><div class="small muted">外观、版本</div></div>${ic('chev', 16)}</button></div>`;
+  $$('[data-p]', pg).forEach(b => b.onclick = () => nav(b.dataset.p));
+  if ($('#upd')) $('#upd').onclick = () => showUpdate(S.update);
+  const home = S.home = await api.home();
+  if (!document.body.contains(pg)) return;
+  $('#logn').textContent = home.logs ? `${home.logs} 条记录` : '暂无记录';
+  // 还没做好的工具不透露是什么，只留一个"敬请期待"的位置
+  $('#tiles').innerHTML = home.tools.filter(t => !t.hidden).map(t => t.ready
+    ? `<div class="tile">${appIcon(t.icon)}<strong>${esc(t.name)}</strong><span class="d">${esc(t.desc)}</span>
+      <div class="row"><button class="get open" data-open="${t.id}">打开</button><span class="sp"></span>${t.admin ? '<span class="small faint">需管理员权限</span>' : ''}</div></div>`
+    : `<div class="tile soon">${appIcon('soon')}<strong>敬请期待</strong></div>`).join('');
+  $$('[data-open]', pg).forEach(b => b.onclick = () => launch(b));
+};
+
+/* 图标弹跳到工具窗口真正出现为止；没打开成功就晃一下并说明原因 */
+async function launch(btn) {
+  const tile = btn.closest('.tile'), id = btn.dataset.open;
+  if (tile.classList.contains('launching')) return;
+  tile.classList.add('launching'); btn.innerHTML = '<i class="spin"></i>';
+  const since = Date.now() / 1000, r = await api.launch(id);
+  if (r.ok) for (let i = 0; i < LAUNCH_POLLS; i++) { await sleep(LAUNCH_POLL_MS); if (await api.is_ready(id, since)) break; }
+  tile.classList.remove('launching'); btn.textContent = '打开';
+  tile.classList.add(r.ok ? 'landed' : 'shake'); setTimeout(() => tile.classList.remove('landed', 'shake'), 600);
+  if (!r.ok) toast(r.error);
+}
+
+/* ---------- 工具与组件 ---------- */
+VIEW.manage = async pg => {
+  pg.innerHTML = `<div><h2>工具与组件</h2><p class="lead">管理首页显示的工具、第三方程序和存储空间。</p></div>
+    <div class="sec">工具 <span>关掉只是不在首页显示，随时可以再打开</span></div><div class="card" id="tools"></div>
+    <div class="sec">第三方程序 <span>自动查找，电脑上有就直接用</span></div><div class="card" id="progs"></div>
+    <div class="sec">占用空间</div><div class="card" id="space"></div>`;
+  const home = await api.home();
+  if (!document.body.contains(pg)) return;
+  const tools = home.tools.filter(t => t.ready);
+  $('#tools').innerHTML = tools.map(t => `<div class="li">${appIcon(t.icon, true)}<div><strong>${esc(t.name)}${t.ready ? '' : ' <span class="tag">敬请期待</span>'}</strong><span class="d">${esc(t.desc)}${t.ready ? ` · 版本 ${esc(t.version)}` : ''}</span></div><button class="sw" role="switch" aria-checked="${!t.hidden}" data-t="${t.id}" aria-label="在首页显示${esc(t.name)}"></button></div>`).join('');
+  $$('[data-t]', pg).forEach(b => b.onclick = async () => {
+    const hide = b.getAttribute('aria-checked') === 'true';
+    if (hide && tools.filter(t => !t.hidden).length === 1) { toast('至少保留一个工具'); return; }
+    b.setAttribute('aria-checked', !hide);
+    (tools.find(t => t.id === b.dataset.t)).hidden = hide;
+    await api.set_tool_hidden(b.dataset.t, hide);
+  });
+
+  const progs = await api.programs();
+  $('#progs').innerHTML = progs.map(p => `<div class="li" data-pr="${p.id}"><span class="gi">${ic('box', 17)}</span><div><strong>${esc(p.name)}</strong><span class="d sel">正在查找…</span></div><span class="tag">查找中</span><button class="btn txt" data-deep hidden>再找一次</button></div>`).join('') || '<div class="li"><div><span class="d">现在的工具都不需要第三方程序。</span></div></div>';
+  for (const row of $$('[data-pr]', pg)) {
+    const p = progs.find(x => x.id === row.dataset.pr), d = row.querySelector('.d'), tag = row.querySelector('.tag'), deep = row.querySelector('[data-deep]');
+    const used = p.used_by.length ? `${p.used_by.join('、')}需要 · ` : '';
+    const find = async isDeep => {
+      tag.className = 'tag'; tag.textContent = '查找中'; deep.hidden = true;
+      d.textContent = used + (isDeep ? '正在查快捷方式和所有本地磁盘…' : '正在查注册表、运行记录和常见文件夹…');
+      const r = await api.detect(p.id, isDeep);
+      if (!document.body.contains(row)) return;
+      tag.className = 'tag ' + (r.found ? 'ok' : 'warn'); tag.textContent = r.found ? '已找到' : '没找到';
+      d.textContent = used + (r.found ? r.path : isDeep ? '彻底查找也没有找到。用到它的工具打开时会提示下载。' : '快速查找没有找到。');
+      deep.hidden = r.found || isDeep;
+    };
+    deep.onclick = () => find(true);
+    find(false);
+  }
+
+  const space = await api.storage();
+  if (!document.body.contains(pg)) return;
+  $('#space').innerHTML = `<div class="li"><div><strong>本地固件</strong><span class="d">在换包的「固件」里管理</span></div><span class="muted">${space.firmware_mb} MB</span></div>
+    <div class="li"><div><strong>快照</strong><span class="d">在换包的「快照」里管理</span></div><span class="muted">${space.snapshots_mb} MB</span></div>
+    <div class="li"><div><strong>数据位置</strong><span class="d mono sel">${esc(space.data_dir)}</span></div></div>`;
+};
+
+/* ---------- 日志 ---------- */
+VIEW.logs = async pg => {
+  pg.innerHTML = `<div><h2>日志</h2><p class="lead">所有工具的操作记录。</p></div><div class="row"><span class="sp"></span><button class="btn" id="clr">清空</button></div><div class="card" id="logs"></div>`;
+  const paint = rows => {
+    if (!document.body.contains(pg)) return;
+    $('#logs').innerHTML = rows.length ? rows.map(l => `<div class="li"><span class="gi">${ic('list', 17)}</span><div><strong>${esc(l.tool)} · ${esc(l.title)}</strong><span class="d sel">${esc(l.time)} · ${esc(l.detail)}</span></div><span class="tag ${l.ok ? 'ok' : 'bad'}">${l.ok ? '成功' : '未完成'}</span></div>`).join('') : '<div class="li"><div><span class="d">暂无记录。</span></div></div>';
+    $('#clr').disabled = !rows.length;
+  };
+  $('#clr').onclick = async () => paint(await api.clear_logs());
+  paint(await api.logs());
+};
+
+/* ---------- 设置 ---------- */
+VIEW.settings = pg => {
+  pg.innerHTML = `<div><h2>设置</h2><p class="lead">工具箱的设置。各工具的设置在各自的窗口里。</p></div>
+    <div class="sec">外观</div><div class="card"><div class="li"><div><strong>主题</strong><span class="d">工具窗口下次打开时生效</span></div><div class="seg" id="theme"><span class="th"></span><button data-v="auto">自动</button><button data-v="light">浅色</button><button data-v="dark">深色</button></div></div></div>
+    <div class="sec">关于</div><div class="card"><div class="li"><div><strong>NS 工具箱 ${esc(S.home ? S.home.version : '')}</strong><span class="d" id="vnote">${S.update && S.update.newer ? `有新版本 ${esc(S.update.latest)}` : S.update ? '已经是最新版本' : ''}</span></div><button class="btn" id="vcheck">${S.update && S.update.newer ? '查看更新' : '检查更新'}</button></div></div>`;
+  seg($('#theme'), S.theme, async v => { S.theme = v; applyTheme(v); await api.set_setting('theme', v); });
+  $('#vcheck').onclick = async e => {
+    const b = e.currentTarget;
+    if (S.update && S.update.newer) { showUpdate(S.update); return; }
+    b.disabled = true; b.textContent = '检查中…';
+    const r = await api.check_update();
+    if (!document.body.contains(b)) return;
+    b.disabled = false;
+    if (r.error) { b.textContent = '检查更新'; $('#vnote').textContent = r.error; return; }
+    S.update = r;
+    b.textContent = r.newer ? '查看更新' : '检查更新'; $('#vnote').textContent = r.newer ? `有新版本 ${r.latest}` : '已经是最新版本';
+    if (r.newer) showUpdate(r);
+  };
+};
+
+/* ---------- 在线更新 ---------- */
+const UPDATE_POLL_MS = 200;
+function showUpdate(info) {
+  sheet({
+    title: `新版本 ${info.latest}`, sm: true,
+    body: `<p class="small muted">当前是 ${esc(info.current)}${info.date ? ` · ${esc(info.date)} 发布` : ''}${info.size ? ` · ${(info.size / 1048576).toFixed(1)} MB` : ''}</p>
+      ${info.notes ? `<div class="sel" style="white-space:pre-wrap">${esc(info.notes)}</div>` : ''}
+      <div id="up-prog" hidden><div class="pbar"><b id="up-bar"></b></div><p class="small muted" id="up-text" style="margin-top:6px"></p></div>`,
+    foot: `<button class="btn" data-x>以后再说</button><button class="btn pri" id="up-go">下载并安装</button>`,
+    async onOpen(el) {
+      const go = el.querySelector('#up-go'), text = () => el.querySelector('#up-text');
+      const fail = message => { text().textContent = message; go.disabled = false; go.textContent = '重试'; go.dataset.s = ''; };
+      go.onclick = async () => {
+        if (go.dataset.s === 'ready') {
+          const r = await api.apply_update();
+          if (r.error) text().textContent = r.error; else { go.disabled = true; go.textContent = '正在重启…'; }
+          return;
+        }
+        const r = await api.start_update();
+        if (r.error) { el.querySelector('#up-prog').hidden = false; fail(r.error); return; }
+        go.disabled = true; go.textContent = '下载中…'; el.querySelector('#up-prog').hidden = false;
+        for (;;) {
+          const st = await api.update_progress();
+          if (!document.body.contains(el)) return;
+          el.querySelector('#up-bar').style.transform = `scaleX(${st.frac})`;
+          if (st.state === 'error') { fail(st.error); return; }
+          if (st.state === 'ready') break;
+          text().textContent = `正在下载 ${st.detail}`;
+          await sleep(UPDATE_POLL_MS);
+        }
+        text().textContent = '已经准备好。重启后生效，换包等工具窗口需要先关掉。';
+        go.disabled = false; go.textContent = '重启并更新'; go.dataset.s = 'ready';
+      };
+    },
+  });
+}
+
+window.addEventListener('pywebviewready', async () => {
+  api = window.pywebview.api;
+  const info = await api.ready();
+  S.theme = info.settings.theme || 'auto';
+  applyTheme(S.theme);
+  draw();
+  // 启动时悄悄查一次更新，有新版就在首页顶上提示
+  const found = await api.check_update();
+  if (!found.error) { S.update = found; if (found.newer && S.page === 'home') draw(true); }
+});
+$('#back').onclick = goBack;
+$('#main').addEventListener('scroll', () => $('#navbar').classList.toggle('scrolled', $('#main').scrollTop > TITLE_HIDDEN_AT), { passive: true });
+// 键盘和鼠标侧键也能返回
+document.addEventListener('keydown', e => { if ((e.altKey && e.key === 'ArrowLeft') || e.key === 'BrowserBack') goBack(); });
+document.addEventListener('mouseup', e => { if (e.button === 3) goBack(); });
+window.addEventListener('focus', () => { if (api && S.page === 'home' && !$('.tile.launching')) draw(true); });
+</script>
+</body>
+</html>
