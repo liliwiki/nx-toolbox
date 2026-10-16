@@ -1,0 +1,16 @@
+{
+  "from": "#FFCB52",
+  "to": "#FF7B02",
+  "shade": "#B64A00",
+  "layers": [
+    {
+      "d": "M56 66V34a32 32 0 1 0 32 32Z",
+      "opacity": 0.5
+    },
+    {
+      "d": "M65 57V26a31 31 0 0 1 31 31Z",
+      "shadow": true,
+      "front": true
+    }
+  ]
+}

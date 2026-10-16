@@ -1,9 +1,16 @@
 {
-  "name": "换区",
-  "desc": "给存储卡重新分区",
-  "version": "0.0.0",
-  "icon": "disk",
+  "name": "换卡",
+  "desc": "把旧卡的内容搬到新卡",
+  "version": "2.0.0",
   "order": 2,
   "admin": true,
-  "programs": ["diskgenius"]
+  "programs": [],
+  "storage": [
+    {
+      "name": "存在电脑上的旧卡",
+      "path": "v2/card",
+      "setting": "stage_dir",
+      "where": "写入新卡后可以删除"
+    }
+  ]
 }
