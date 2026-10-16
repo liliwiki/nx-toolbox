@@ -5,6 +5,9 @@
   2. 在黑名单里的，清除
   3. 在白名单里的，保留
 其余的一律清除，然后装上新的整合包。
+
+不是可移动存储卡（电脑硬盘、移动硬盘、卡里的子文件夹）时，"其余一律清除"不生效：
+只在大气层自己的文件夹里清黑名单和你手动标记的，别的一概不动，整合包里的文件照常覆盖。
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ IGNORED_ROOTS = {"system volume information", "$recycle.bin", ".trashes", ".spot
 LINUX_ROOTS = ("lakka", "ubuntu", "android", "lineage")
 MOD_PATCH_DIR = "atmosphere/exefs_patches"
 MOD_PATCH_WORDS = ("fps", "graphics", "mod")
+SWITCH_ROOTS = ("atmosphere", "bootloader", "switch", "config")   # 不是存储卡时，只有这些（和整合包的顶层文件夹）里能清理
 LIST_FILES = ("atmosphere/whitelist.txt", "atmosphere/blacklist.txt", "whitelist.txt", "blacklist.txt")
 SD_LIST_DIRS = ("atmosphere", "")
 
@@ -30,13 +34,16 @@ GROUPS = [
     {"id": "keys", "kind": "guard", "icon": "key", "name": "密钥和联网证书", "desc": "给真实系统刷机用。没有它，刷机只能刷成被封禁（ban）的机器"},
     {"id": "saves", "kind": "keep", "icon": "save", "name": "存档备份", "desc": "JKSV 等工具导出的存档"},
     {"id": "cheats", "kind": "keep", "icon": "spark", "name": "金手指和 MOD", "desc": "各个游戏的 cheats、romfs、exefs"},
+    {"id": "games", "kind": "guard", "icon": "box", "name": "游戏安装包", "desc": "放在卡上的 nsp、nsz、xci、xcz 文件"},
     {"id": "emus", "kind": "keep", "icon": "pad", "name": "模拟器和 ROM", "desc": "RetroArch、PPSSPP、ONS 等和它们的游戏"},
+    {"id": "media", "kind": "guard", "icon": "file", "name": "视频和音乐", "desc": "放在卡上的 mp4、mkv、mp3、flac 等"},
     {"id": "amiibo", "kind": "keep", "icon": "tag", "name": "Amiibo 数据", "desc": "emuiibo 里的虚拟 Amiibo"},
     {"id": "linux", "kind": "keep", "icon": "layers", "name": "安卓和 Linux", "desc": "switchroot 和它的启动项"},
     {"id": "misc", "kind": "keep", "icon": "list", "name": "白名单里的其他内容", "desc": "FTP、网盘等工具的配置，和名单文件本身"},
     {"id": "black", "kind": "clear", "icon": "plug", "name": "黑名单", "desc": "会冲突的旧插件、系统模块和主题，不清掉可能开机报错"},
     {"id": "rest", "kind": "clear", "icon": "folder", "name": "其他文件", "desc": "不在白名单里的都会清掉，再装上新的整合包"},
 ]
+NO_SNAPSHOT = ("emu", "games", "media")     # 动辄几十 GB，不进快照
 GROUP_DEFAULTS = {g["id"]: g["kind"] != "clear" for g in GROUPS}
 
 # 内置白名单里每条路径属于哪个类别；没列出的归 misc
@@ -51,10 +58,29 @@ _WHITE_GROUP = {
         "switch/retroarch_switch.nro", "switch/retroarch_switch", "switch/retroarch.nro", "switch/retroarch",
         "nds", "tico", "emutendo", "flashnx", "gbastation", "dusk", "twilitrealm")},
 }
+# 按扩展名认出来的用户文件，在卡上哪里都保留（拆分的大游戏是一个叫 xxx.nsp 的文件夹，也算）
+_EXT_GROUP = {
+    **{e: "games" for e in ("nsp", "nsz", "xci", "xcz")},
+    **{e: "emus" for e in (
+        "nes", "fds", "sfc", "smc", "gb", "gbc", "gba", "nds", "3ds", "cia", "n64", "z64", "v64", "md", "gen", "smd",
+        "sms", "gg", "pce", "ngp", "ngc", "ws", "wsc", "a26", "lnx", "32x", "iso", "cso", "chd", "pbp", "gcm", "rvz",
+        "wbfs", "cue")},
+    **{e: "media" for e in (
+        "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "rmvb", "mp3", "flac", "wav", "aac", "m4a", "ogg",
+        "ape", "wma", "opus")},
+}
+
 _EXTRA_WHITE = ("bootloader/ini", "switch/retroarch_switch.nro", "switch/retroarch_switch", "switch/retroarch.nro",
                 "switch/retroarch")
 
-WHY = {"user": "你的设置", "black": "黑名单", "white": "白名单", "default": "不在白名单", "on": "整组保留", "off": "整组不保留"}
+WHY = {"user": "你的设置", "black": "黑名单", "white": "白名单", "default": "不在白名单", "on": "整组保留", "off": "整组不保留",
+       "pc": "不是存储卡，不清理"}
+
+
+def ext_group(name: str) -> str | None:
+    """按扩展名认出来的类别（游戏、ROM、影音），认不出来返回 None。"""
+    _, dot, ext = name.rpartition(".")
+    return _EXT_GROUP.get(ext.lower()) if dot else None
 
 
 def norm(path: str) -> str:
@@ -108,8 +134,12 @@ class Node:
 class RuleSet:
     def __init__(self, groups: dict[str, bool], user: dict[str, str],
                  extra_white: list[tuple[str, str]], extra_black: list[tuple[str, str]],
-                 package_files: list[str] | None) -> None:
-        """extra_white / extra_black 是 (路径, 来源)，来源是 "SD 卡" 或 "整合包"。"""
+                 package_files: list[str] | None, card: bool = True) -> None:
+        """extra_white / extra_black 是 (路径, 来源)，来源是 "SD 卡" 或 "整合包"。
+
+        card=False 表示不是可移动存储卡，只清大气层文件夹里的黑名单和手动标记的。
+        """
+        self.card = card
         self.groups = {**GROUP_DEFAULTS, **{k: v for k, v in groups.items() if k in GROUP_DEFAULTS}}
         self.user = {norm(p): v for p, v in user.items() if norm(p)}
         white, black = builtin_lists()
@@ -122,6 +152,7 @@ class RuleSet:
         self.black += [(norm(p), src, p) for p, src in extra_black if norm(p)]
         package = {norm(f) for f in package_files or []}
         self._package = package | _ancestors(package)
+        self._switch_roots = set(SWITCH_ROOTS) | {f.split("/", 1)[0] for f in package if "/" in f}
         self._user_inner = _ancestors(self.user)
         self._inner = (_ancestors(p for p, *_ in self.white) | _ancestors(p for p, *_ in self.black)
                        | self._user_inner | {"atmosphere", MOD_PATCH_DIR})
@@ -136,6 +167,9 @@ class RuleSet:
         if hit:
             return hit[2]
         parts = path.split("/")
+        ext = ext_group(parts[-1])
+        if ext:
+            return ext
         if parts[0].startswith("l4t-") or parts[0] in LINUX_ROOTS:
             return "linux"
         if path.startswith(MOD_PATCH_DIR + "/") and any(w in parts[2] for w in MOD_PATCH_WORDS):
@@ -147,6 +181,12 @@ class RuleSet:
         return self.user[best] if best else None
 
     def evaluate(self, path: str) -> Verdict:
+        verdict = self._evaluate(path)
+        if not self.card and not verdict.keep and (verdict.why == "default" or path.split("/", 1)[0] not in self._switch_roots):
+            return Verdict(True, "pc", verdict.group, path in self._package)
+        return verdict
+
+    def _evaluate(self, path: str) -> Verdict:
         group = self.group_of(path)
         rule = self.user_rule(path)
         if rule:
@@ -166,6 +206,10 @@ class RuleSet:
         if self._black(path):
             return False
         return path in self._inner
+
+    def may_delete(self, path: str) -> bool:
+        """最后一道关：不是存储卡时，大气层文件夹以外的东西绝不删。"""
+        return self.card or norm(path).split("/", 1)[0] in self._switch_roots
 
     def will_install(self, package_path: str) -> bool:
         path = norm(package_path)
@@ -200,6 +244,17 @@ def _measure(path: str) -> tuple[int, int]:
     return files, size
 
 
+def _holds_ext(folder: str) -> bool:
+    """文件夹里有没有按扩展名认得出的游戏、影音。
+
+    不管那一类开没开都往里走：开着就留下，关着也要单独算进那一类，免得几十 GB 的游戏被当成普通文件夹存进快照。
+    """
+    for _, dirs, names in os.walk(folder):
+        if any(ext_group(n) for n in dirs + names):
+            return True
+    return False
+
+
 def scan(sd_root: str, rules: RuleSet) -> list[Node]:
     """走一遍存储卡。处理方式一致的文件夹不往里走，所以大的存档、游戏目录不会被遍历。"""
     nodes: list[Node] = []
@@ -219,6 +274,10 @@ def scan(sd_root: str, rules: RuleSet) -> list[Node]:
                 walk(entry.path, path)
                 continue
             verdict = rules.evaluate(key)
+            if is_dir and not verdict.keep and verdict.why == "default" and _holds_ext(entry.path):
+                # 一个普通文件夹里放了游戏、视频：往里走，只清别的，游戏留下
+                walk(entry.path, path)
+                continue
             node = Node(path, is_dir, verdict)
             if is_dir and not verdict.keep:
                 node.files, node.size = _measure(entry.path)

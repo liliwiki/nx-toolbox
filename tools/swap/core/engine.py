@@ -8,8 +8,8 @@ import stat
 import zlib
 
 from core import package, snapshots
-from core.jobs import Job
-from core.rules import Node, RuleSet
+from nxhost.jobs import Job
+from core.rules import NO_SNAPSHOT, Node, RuleSet
 
 CRC_BLOCK = 1024 * 1024
 S_DOWNLOAD, S_EXTRACT, S_SNAPSHOT, S_CLEAN, S_INSTALL, S_VERIFY = (
@@ -71,6 +71,9 @@ def _package_files(root: str) -> list[str]:
 def run_update(job: Job, sd_root: str, listing: package.Listing | None, nodes: list[Node], rules: RuleSet,
                snapshot: bool) -> dict:
     deletes = [n for n in nodes if not n.verdict.keep]
+    unsafe = [n.path for n in deletes if not rules.may_delete(n.path)]
+    if unsafe:
+        raise OSError(f"这里不是存储卡，不会删除 {unsafe[0]}")
     work_dir = package.make_work_dir() if listing else None
     try:
         installs: list[str] = []
@@ -99,10 +102,10 @@ def run_update(job: Job, sd_root: str, listing: package.Listing | None, nodes: l
         if snapshot:
             job.step(S_SNAPSHOT)
             # 要清掉的和要被覆盖的可能是同一个文件，按路径去重。
-            # 游戏和虚拟系统动辄几十 GB，不进快照（取消保留时界面已经说明）
+            # 游戏、影音和虚拟系统动辄几十 GB，不进快照（取消保留时界面已经说明）
             items = list({path.lower(): (path, is_dir) for path, is_dir in
                           [(f, False) for f in installs if os.path.isfile(os.path.join(sd_root, f))]
-                          + [(n.path.replace("\\", "/"), n.is_dir) for n in deletes if n.verdict.group != "emu"]}.values())
+                          + [(n.path.replace("\\", "/"), n.is_dir) for n in deletes if n.verdict.group not in NO_SNAPSHOT]}.values())
             title = f"更新整合包 {listing.ams or ''}".strip() if listing else "清理存储卡"
             snapshot_meta = snapshots.create(sd_root, title, items, job.progress, job.check)
 

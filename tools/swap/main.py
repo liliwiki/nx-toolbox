@@ -7,10 +7,9 @@ import os
 from pathlib import Path
 
 from core import engine, firmware, package, rules, sdcard, snapshots
-from core.jobs import Job
-from core.package import Cancelled
 from nxhost import shared
 from nxhost.api import BaseApi
+from nxhost.jobs import Cancelled, Job
 
 TOOL_ID = "swap"
 TOOL_NAME = "换包"
@@ -158,7 +157,7 @@ class Api(BaseApi):
             white += [(p, "整合包") for p in self._listing.lists["white"]]
             black += [(p, "整合包") for p in self._listing.lists["black"]]
         files = self._listing.files if self._listing else None
-        return rules.RuleSet(settings["groups"], settings["user"], white, black, files)
+        return rules.RuleSet(settings["groups"], settings["user"], white, black, files, sdcard.is_card(card_path))
 
     def plan(self, card_path: str) -> dict:
         reason = sdcard.check_target(card_path)
@@ -175,13 +174,16 @@ class Api(BaseApi):
             for node in mine[:MAX_ITEMS]:
                 cls, text = _label(node.verdict)
                 items.append({"path": node.path, "dir": node.is_dir, "keep": node.verdict.keep, "cls": cls, "text": text,
-                              "hint": _hint(card_path, node.path)})
+                              "hint": _hint(card_path, node.path), "fixed": node.verdict.why == "pc"})
+            if meta["id"] == "rest" and not ruleset.card:
+                # 不是存储卡：白名单以外的也不动，这一组只是列出来，不能改
+                meta = {**meta, "kind": "keep", "fixed": True, "desc": "这里不是可移动存储卡，白名单以外的也不会清理"}
             groups.append({**meta, **_outcome(mine), "count": len(mine), "items": items,
                            "more": max(0, len(mine) - MAX_ITEMS)})
         deletes = [n for n in nodes if not n.verdict.keep]
         installs = [f for f in self._listing.files if ruleset.will_install(f)] if self._listing else []
-        backup = sum(n.size for n in nodes if n.verdict.group != "emu" and (not n.verdict.keep or n.verdict.overwritten))
-        return {"groups": groups, "source": self._source_state(),
+        backup = sum(n.size for n in nodes if n.verdict.group not in rules.NO_SNAPSHOT and (not n.verdict.keep or n.verdict.overwritten))
+        return {"groups": groups, "source": self._source_state(), "card_mode": ruleset.card,
                 "totals": {"delete": sum(n.files for n in deletes), "install": len(installs),
                            "snapshot_mb": round(backup / 1048576, 1)}}
 
@@ -227,7 +229,7 @@ class Api(BaseApi):
             verdict = ruleset.evaluate(rules.norm(rel))
             cls, text = _label(verdict)
             result.append({"path": rel, "dir": entry.is_dir(follow_symlinks=False), "keep": verdict.keep,
-                           "cls": cls, "text": text, "hint": _hint(card_path, rel)})
+                           "cls": cls, "text": text, "hint": _hint(card_path, rel), "fixed": verdict.why == "pc"})
         return result
 
     def clear_rule(self, path: str) -> dict:
@@ -262,7 +264,8 @@ class Api(BaseApi):
         self._job = Job(title, steps).start(logged)
         return {"ok": True, "steps": steps}
 
-    def start(self, card_path: str) -> dict:
+    def start(self, card_path: str, expect_delete: int | None = None) -> dict:
+        """expect_delete 是用户在确认框里看到的删除数量；和现在算出来的对不上就不开始。"""
         reason = sdcard.check_target(card_path)
         if reason:
             return {"error": reason}
@@ -271,6 +274,9 @@ class Api(BaseApi):
         listing, ruleset = self._listing, self._rules(card_path)
         nodes = rules.scan(card_path, ruleset)
         has_deletes = any(not n.verdict.keep for n in nodes)
+        delete_files = sum(n.files for n in nodes if not n.verdict.keep)
+        if expect_delete is not None and delete_files != expect_delete:
+            return {"error": f"卡上的内容变了（现在要清掉 {delete_files} 个文件，确认时是 {expect_delete} 个），请重新确认", "replan": True}
         if not listing and not has_deletes:
             return {"error": "没有需要清理的东西"}
         snapshot = bool(self._settings()["snapshot"])

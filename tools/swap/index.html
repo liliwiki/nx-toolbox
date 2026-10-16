@@ -5,9 +5,6 @@
 <title>换包</title>
 <style>/*BASE_CSS*/
 /* 换包自己的样式 */
-.dev{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.dev .ico{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--surface);box-shadow:0 0 0 1px var(--hair);color:var(--link)}
-.dev strong{display:block;font-size:15px;font-weight:600}
 .dev .use{flex:1;min-width:120px;max-width:210px}
 .hero{display:flex;flex-direction:column;gap:14px;position:relative}
 .eyebrow{font-size:12px;font-weight:600;color:var(--link)}
@@ -21,10 +18,6 @@
 .sumline b{font-weight:600;font-variant-numeric:tabular-nums}
 .sumline .d{color:var(--red)}.sumline .i{color:var(--link)}
 .prog{display:grid;gap:8px}
-.okmark{width:56px;height:56px;color:var(--green)}
-.okmark circle{stroke-dasharray:164;stroke-dashoffset:164;animation:draw .7s var(--ease) .1s forwards}
-.okmark path{stroke-dasharray:40;stroke-dashoffset:40;animation:draw .4s var(--ease) .6s forwards}
-@keyframes draw{to{stroke-dashoffset:0}}
 .grp{border-top:1px solid var(--hair)}
 .grp:first-child{border-top:0}
 .grp-h{display:flex;align-items:center;gap:10px;padding:11px 14px}
@@ -38,7 +31,6 @@
 .pill{font-size:12px;font-weight:500;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:color .3s}
 .pill.keep{color:var(--green)}.pill.del{color:var(--red)}.pill.swap{color:var(--link)}.pill.mix{color:var(--orange)}.pill.wait{color:var(--faint)}
 .pill.busy::before{content:"";width:11px;height:11px;border-radius:50%;border:1.5px solid currentColor;border-top-color:transparent;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
 .grp-b{display:grid;grid-template-rows:0fr;transition:grid-template-rows .42s var(--ease)}
 .grp.open .grp-b{grid-template-rows:1fr}
 .grp-in{overflow:hidden;min-height:0}
@@ -85,39 +77,13 @@ let api;
 const S = { page: 'update', phase: 'empty', cards: [], card: null, plan: null, source: { kind: 'none' }, sourceBusy: true,
   open: new Set(), openDirs: new Set(), lazy: new Map(), loading: new Set(), justOpened: null, opts: {}, done: null, job: false, skip: null, notice: '' };
 const VIEW = {};
-const POLL_CARDS_MS = 1500, POLL_JOB_MS = 150;
-const TITLES = { update: '换包', fw: '固件', snaps: '快照', settings: '设置' }, TITLE_HIDDEN_AT = 44;
+const POLL_CARDS_MS = 1500;
 const STEP_CLEAN = '清理旧文件', STEP_INSTALL = '安装新文件', STEP_VERIFY = '校验';
 
 /* ---------- 框架 ---------- */
-function drawSide() {
-  const b = (id, n, i) => `<button class="nav ${S.page === id ? 'on' : ''}" data-p="${id}" ${S.page === id ? 'aria-current="page"' : ''}>${ic(i)}<span>${n}</span></button>`;
-  $('#side').innerHTML = `<div class="brand">换包</div>` + b('update', '更新', 'swap') + b('fw', '固件', 'chip') + b('snaps', '快照', 'clock') + '<span class="sp"></span>' + b('settings', '设置', 'gear');
-  $$('#side .nav').forEach(x => x.onclick = () => nav(x.dataset.p));
-}
-async function nav(p) {
-  if (p === S.page) return;
-  if (S.job) { toast('有任务在进行，完成后再切换'); return; }
-  if (!RM) await Promise.race([$('#page').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, fill: 'forwards' }).finished, sleep(180)]);
-  S.page = p; drawSide(); draw();
-}
-function draw(still) {
-  const old = $('#page'), pg = document.createElement('div'), top = $('#main').scrollTop;
-  pg.className = 'page' + (still ? ' still' : ''); pg.id = 'page'; old.replaceWith(pg);
-  $('#navtitle').textContent = TITLES[S.page];
-  VIEW[S.page](pg);
-  $('#main').scrollTop = still ? top : 0;
-  $('#navbar').classList.toggle('scrolled', $('#main').scrollTop > TITLE_HIDDEN_AT);
-}
-/* 跟着后台任务走，每次进度变化调一次 onTick，结束后返回最后的状态 */
-async function follow(onTick) {
-  S.job = true;
-  let state;
-  try {
-    for (;;) { state = await api.progress(); onTick(state); if (!state.running) break; await sleep(POLL_JOB_MS); }
-  } finally { S.job = false; }
-  return state;
-}
+const { drawSide, nav, draw, follow } = toolShell({ state: S, api: () => api, brand: '换包', views: VIEW, pages: [
+  { id: 'update', name: '更新', title: '换包', icon: 'swap' }, { id: 'fw', name: '固件', title: '固件', icon: 'chip' },
+  { id: 'snaps', name: '快照', title: '快照', icon: 'clock' }, { id: 'settings', name: '设置', title: '设置', icon: 'gear', bottom: true }] });
 
 /* ---------- 存储卡 ---------- */
 async function watchCards() {
@@ -208,6 +174,8 @@ VIEW.update = pg => {
 /* 正版系统、虚拟系统、密钥和证书可以取消保留，但要再确认一次 */
 const GUARD_WARNING = {
   emu: '这是正版系统的数据（Nintendo）和虚拟系统（emuMMC），里面有已安装的游戏。体积太大，<b>不会存进快照</b>，清掉之后无法恢复。',
+  games: '这些是放在卡上的游戏安装包。体积太大，<b>不会存进快照</b>，清掉之后无法恢复，只能重新拷贝。',
+  media: '这些是放在卡上的视频和音乐。体积太大，<b>不会存进快照</b>，清掉之后无法恢复。',
   keys: '联网证书是给真实系统刷机用的。<br><br>大气层只有在能正常进入真实系统或虚拟系统时才会提取它，进不去就提取不了。虚拟系统又是从真实系统复制出来的，所以两个系统都进不去时，想修复真实系统只能刷机；那时如果没有联网证书，就只能刷成被封禁（ban）的机器。<br><br>除非你在别处另有备份，否则不要清掉。',
 };
 async function confirmDrop(group, what) {
@@ -235,7 +203,7 @@ const leavesOf = node => node.item ? [node.item] : [...node.kids.values()].flatM
 function rowHtml(r) {
   return `<div class="sub ${r.fresh ? 'fresh' : ''}" style="padding-left:${ROW_PAD + r.depth * INDENT}px" data-k="${esc(r.key)}" data-p="${esc(r.path)}" data-t="${r.type}">
     ${r.expandable ? `<button class="disc ${r.open ? 'on' : ''}" aria-expanded="${r.open}" aria-label="展开 ${esc(r.label)}">${ic('chev', 13)}</button>` : '<span class="disc-sp"></span>'}
-    <button class="cb" role="checkbox" aria-checked="${r.checked}" aria-label="保留 ${esc(r.path)}">${ic('check', 13, 'ck')}${ic('dash', 13, 'mx')}</button>
+    <button class="cb" role="checkbox" aria-checked="${r.checked}" aria-label="保留 ${esc(r.path)}" ${r.fixed ? 'disabled' : ''}>${ic('check', 13, 'ck')}${ic('dash', 13, 'mx')}</button>
     <span class="fi ${r.dir ? '' : 'f'}">${ic(r.dir ? 'folder' : 'file', 15)}</span>
     <span class="mono sel nm">${r.hint ? `<b class="tn">${esc(r.hint)}</b><em>${esc(r.label)}</em>` : esc(r.label)}</span><span class="why ${r.cls === 'keep' ? '' : r.cls}">${r.text}</span></div>`;
 }
@@ -243,7 +211,7 @@ function rowHtml(r) {
 function itemRows(item, gid, depth, label, fresh) {
   const key = gid + '|' + item.path, open = item.dir && S.openDirs.has(key), kids = open ? S.lazy.get(item.path) : null;
   let html = rowHtml({ key, path: item.path, type: 'item', depth, label, dir: item.dir, expandable: item.dir, open, fresh,
-    checked: item.keep, cls: item.cls, text: item.text, hint: item.hint });
+    checked: item.keep, cls: item.cls, text: item.text, hint: item.hint, fixed: item.fixed });
   if (open) {
     const inner = fresh || S.justOpened === key;
     html += kids ? (kids.map(k => itemRows(k, gid, depth + 1, k.path.split('/').pop(), inner)).join('') || `<div class="sub faint" style="padding-left:${ROW_PAD + (depth + 1) * INDENT + 22}px">空文件夹</div>`)
@@ -257,7 +225,7 @@ function treeRows(node, gid, depth, fresh) {
     while (!n.item && n.kids.size === 1) { n = [...n.kids.values()][0]; label += '/' + n.name; }   // 只有一个子项的连成一行
     if (n.item) return itemRows(n.item, gid, depth, label, fresh);
     const key = gid + '|' + n.path, open = S.openDirs.has(key), all = leavesOf(n), kept = all.filter(i => i.keep).length;
-    return rowHtml({ key, path: n.path, type: 'folder', depth, label, dir: true, expandable: true, open, fresh,
+    return rowHtml({ key, path: n.path, type: 'folder', depth, label, dir: true, expandable: true, open, fresh, fixed: all.every(i => i.fixed),
       checked: kept === all.length ? 'true' : kept ? 'mixed' : 'false', cls: kept === all.length ? 'keep' : kept ? 'mix' : 'del',
       text: kept === all.length ? `${all.length} 项 · 保留` : kept ? `保留 ${kept} 项 · 清除 ${all.length - kept} 项` : `${all.length} 项 · 清除` })
       + (open ? treeRows(n, gid, depth + 1, fresh || S.justOpened === key) : '');
@@ -270,7 +238,7 @@ function paintGroups() {
   const trees = new Map(S.plan.groups.map(g => [g.id, buildTree(g.items)]));
   const row = g => `<div class="grp ${S.open.has(g.id) ? 'open' : ''}" data-g="${g.id}" data-c="${g.cls}"><div class="grp-h">
       <button class="disc" aria-expanded="${S.open.has(g.id)}" aria-label="展开 ${g.name}">${ic('chev', 14)}</button>
-      <button class="cb" role="checkbox" aria-checked="${g.checked}" aria-label="保留 ${g.name}">${ic('check', 13, 'ck')}${ic('dash', 13, 'mx')}</button>
+      <button class="cb" role="checkbox" aria-checked="${g.checked}" aria-label="保留 ${g.name}" ${g.fixed ? 'disabled' : ''}>${ic('check', 13, 'ck')}${ic('dash', 13, 'mx')}</button>
       <span class="gi">${ic(g.icon, 17)}</span>
       <div class="grp-t"><strong>${g.name}</strong><span>${S.phase === 'done' ? '' : g.desc + ' · '}${fmt(g.count)} 项</span></div>
       <span class="pill ${g.cls}" data-t="${esc(g.text)}">${g.text}</span></div>
@@ -339,7 +307,9 @@ function paintHero() {
   else if (s.error) head = `<div class="eyebrow warn">读不到在线整合包</div><h1>大气层 ${c.ams || ''}</h1><p class="lead sel">${esc(s.error)}</p>`;
   else head = `<div class="eyebrow">只清理</div><h1>清理这张卡</h1><p class="lead">不安装整合包，只按下面的勾选清掉文件。</p>`;
   const goText = has ? `更新到 ${s.ams || '新版本'}` : s.error ? '重试' : '开始清理';
-  h.innerHTML = `${c.looks_like_sd ? '' : `<div class="eyebrow warn">这个位置不像 Switch 存储卡，请确认选对了</div>`}${head}
+  const warn = !c.looks_like_sd ? '这个位置不像 Switch 存储卡，请确认选对了'
+    : S.plan && !S.plan.card_mode ? '这里不是可移动存储卡，只更新整合包里的文件，不清理别的' : '';
+  h.innerHTML = `${warn ? `<div class="eyebrow warn">${warn}</div>` : ''}${head}
     ${t ? `<p class="sumline">清掉 <b class="d" id="n-d"></b> 个旧文件${has ? `，装入 <b class="i" id="n-i"></b> 个新文件` : ''}。白名单里的内容保留。</p>` : ''}
     <div class="row" id="act"><button class="btn pri big" id="go" ${S.sourceBusy || !t || (!s.error && !t.delete && !t.install) ? 'disabled' : ''}>${goText}</button>
       <button class="src" id="src" data-menu aria-haspopup="true">整合包：${srcName}${ic('down', 14)}</button><span class="sp"></span><button class="btn txt" id="rules" ${S.plan ? '' : 'disabled'}>规则</button></div>
@@ -370,14 +340,17 @@ function pillRun(stage) {
 
 async function start() {
   const plan = S.plan, has = S.source.kind === 'online' || S.source.kind === 'local';
-  const off = plan.groups.filter(g => g.kind !== 'clear' && g.checked !== 'true').map(g => g.name);
-  if (off.length || !has) {
-    const ok = await ask({ title: has ? '这些内容会被清掉' : '开始清理？', danger: true, ok: has ? '清掉并更新' : '开始清理',
-      body: `${off.length ? `没有全部保留：<b>${off.join('、')}</b>。<br>` : ''}一共会清掉 ${fmt(plan.totals.delete)} 个文件。${!has ? '<br>大气层本身也会被清掉，之后要再装一次整合包才能开机。' : ''}<br>${S.opts.snapshot ? '会先创建快照，之后可以恢复。' : '<span style="color:var(--red)">没有开快照，清掉后无法恢复。</span>'}` });
-    if (!ok) return;
-  }
-  const r = await api.start(S.card.path);
-  if (r.error) { tell('没有开始', esc(r.error)); return; }
+  const off = plan.groups.filter(g => g.kind !== 'clear' && !g.fixed && g.checked !== 'true').map(g => g.name);
+  const c = S.card, where = `<span class="mono sel">${esc(c.letter)}</span> ${esc(c.label)}${c.total_gb ? `（${c.total_gb} GB，已用 ${c.used_gb} GB）` : ''}`;
+  // 每次开始前都确认一遍位置和数量，免得选错了盘
+  const ok = await ask({ title: has ? '确认更新这个位置？' : '确认清理这个位置？', danger: true, ok: has ? '清掉并更新' : '开始清理',
+    body: `位置：${where}<br>${plan.card_mode ? '' : '这里不是可移动存储卡，只覆盖整合包里的文件，白名单以外的也不清理。<br>'}`
+      + `会清掉 <b>${fmt(plan.totals.delete)}</b> 个文件${has ? `，装入 ${fmt(plan.totals.install)} 个新文件` : ''}。`
+      + `${off.length ? `<br>没有全部保留：<b>${off.join('、')}</b>。` : ''}${!has ? '<br>大气层本身也会被清掉，之后要再装一次整合包才能开机。' : ''}`
+      + `<br>${S.opts.snapshot ? '会先创建快照，之后可以恢复。' : '<span style="color:var(--red)">没有开快照，清掉后无法恢复。</span>'}` });
+  if (!ok) return;
+  const r = await api.start(S.card.path, plan.totals.delete);
+  if (r.error) { tell('没有开始', esc(r.error)); if (r.replan) loadPlan(); return; }
   S.phase = 'run'; $('#page').classList.add('locked'); $('#srcm')?.classList.remove('show'); $('#snaprow')?.remove();
   $('#act').outerHTML = `<div class="prog" id="prog"><div class="row"><strong id="pl">准备中</strong><span class="sp"></span><span class="small muted" id="ps" style="font-variant-numeric:tabular-nums"></span></div><div class="pbar"><b id="pb"></b></div><div class="path" id="px"></div><div class="row"><button class="btn" id="stop">停止</button><span class="small faint">请不要拔出存储卡。</span></div></div>`;
   const eyebrow = $('#hero .eyebrow:not(.warn)'); if (eyebrow) eyebrow.textContent = has ? '正在更新' : '正在清理';
@@ -411,7 +384,7 @@ async function start() {
 
 function paintDone() {
   const h = $('#hero'), d = S.done, c = S.card;
-  h.innerHTML = `<svg class="okmark" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="28" cy="28" r="26" transform="rotate(-90 28 28)"/><path d="m18 29 7 7 14-15"/></svg>
+  h.innerHTML = `${OK_MARK}
     <h1>${d.package ? `已更新到大气层 ${d.ams || c.ams || ''}` : '清理完成'}</h1>
     <p class="lead" id="dl">${d.package && d.hos ? `支持系统 ${d.hos} 及以下。` : ''}清掉了 ${fmt(d.deleted)} 个旧文件${d.package ? `，装入并校验了 ${fmt(d.installed)} 个文件` : ''}，白名单里的内容都还在。</p>
     <div class="row"><button class="btn pri big" id="ej">${ic('eject', 16)}安全弹出</button><button class="btn" id="tofw">接着装固件</button>${d.snapshot ? '<button class="btn" id="tosn">查看快照</button>' : ''}<span class="sp"></span><button class="btn txt" id="back">返回</button></div>`;
@@ -517,7 +490,6 @@ VIEW.settings = pg => {
   $$('.sw[data-k]', pg).forEach(b => b.onclick = async () => { const on = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', on); S.opts = await api.set_option(b.dataset.k, on); if (S.card && S.phase === 'ready') { S.plan = null; loadPlan(); } });
 };
 
-$('#main').addEventListener('scroll', () => $('#navbar').classList.toggle('scrolled', $('#main').scrollTop > TITLE_HIDDEN_AT), { passive: true });
 window.addEventListener('pywebviewready', async () => {
   api = window.pywebview.api;
   const info = await api.ready();
