@@ -14,9 +14,6 @@
 .act{width:100%;display:grid;gap:10px;justify-items:center;min-height:74px;align-content:center}
 .act .pbar{width:100%}
 .okmark{width:52px;height:52px;color:var(--green)}
-.okmark circle{stroke-dasharray:164;stroke-dashoffset:164;animation:draw .7s var(--ease) .1s forwards}
-.okmark path{stroke-dasharray:40;stroke-dashoffset:40;animation:draw .4s var(--ease) .6s forwards}
-@keyframes draw{to{stroke-dashoffset:0}}
 </style>
 </head>
 <body>
@@ -55,7 +52,7 @@ async function run() {
     await sleep(POLL_MS);
   }
   if (state.state === 'error') { await tell('没有装好', esc(state.error)); paint(); return; }
-  $('#wrap').innerHTML = `<svg class="okmark" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="28" cy="28" r="26" transform="rotate(-90 28 28)"/><path d="m18 29 7 7 14-15"/></svg>
+  $('#wrap').innerHTML = `${OK_MARK}
     <div><h2>已经装好了</h2><p class="lead" style="margin-top:4px">以后从${S.desktop ? '桌面' : S.startmenu ? '开始菜单' : '安装位置'}打开。要卸载的话，再运行一次这个安装程序，或者在系统设置的「已安装的应用」里找 NS 工具箱。</p></div>
     <div class="row" style="justify-content:center"><button class="btn pri big" id="open">打开 NS 工具箱</button><button class="btn big" id="close">关闭</button></div>`;
   $('#open').onclick = () => api.finish(true);

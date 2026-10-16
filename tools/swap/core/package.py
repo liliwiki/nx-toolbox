@@ -17,6 +17,8 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from nxhost.jobs import Cancelled
+
 BIN_7Z = Path(__file__).resolve().parent.parent / "bin" / "7z" / "7z.exe"
 USER_AGENT = "NXToolbox/2.0"
 RANGE_BLOCK = 256 * 1024
@@ -25,10 +27,6 @@ ROOT_DIRS = ("atmosphere", "bootloader")
 ROOT_FILE = "payload.bin"
 FIRMWARE_MIN_NCA = 10
 ARCHIVE_EXTS = (".zip", ".7z", ".rar")
-
-
-class Cancelled(Exception):
-    pass
 
 
 @dataclass

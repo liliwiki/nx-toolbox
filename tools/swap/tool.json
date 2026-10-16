@@ -2,8 +2,19 @@
   "name": "换包",
   "desc": "更新大气层整合包",
   "version": "2.0.0",
-  "icon": "swap",
   "order": 1,
   "admin": false,
-  "programs": []
+  "programs": [],
+  "storage": [
+    {
+      "name": "本地固件",
+      "path": "固件",
+      "where": "在「固件」里管理"
+    },
+    {
+      "name": "快照",
+      "path": "v2/snapshots",
+      "where": "在「快照」里管理"
+    }
+  ]
 }

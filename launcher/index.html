@@ -81,7 +81,7 @@ VIEW.home = async pg => {
   $('#tiles').innerHTML = home.tools.filter(t => !t.hidden).map(t => t.ready
     ? `<div class="tile">${appIcon(t.icon)}<strong>${esc(t.name)}</strong><span class="d">${esc(t.desc)}</span>
       <div class="row"><button class="get open" data-open="${t.id}">打开</button><span class="sp"></span>${t.admin ? '<span class="small faint">需管理员权限</span>' : ''}</div></div>`
-    : `<div class="tile soon">${appIcon('soon')}<strong>敬请期待</strong></div>`).join('');
+    : `<div class="tile soon">${appIcon(null)}<strong>敬请期待</strong></div>`).join('');
   $$('[data-open]', pg).forEach(b => b.onclick = () => launch(b));
 };
 
@@ -135,9 +135,8 @@ VIEW.manage = async pg => {
 
   const space = await api.storage();
   if (!document.body.contains(pg)) return;
-  $('#space').innerHTML = `<div class="li"><div><strong>本地固件</strong><span class="d">在换包的「固件」里管理</span></div><span class="muted">${space.firmware_mb} MB</span></div>
-    <div class="li"><div><strong>快照</strong><span class="d">在换包的「快照」里管理</span></div><span class="muted">${space.snapshots_mb} MB</span></div>
-    <div class="li"><div><strong>数据位置</strong><span class="d mono sel">${esc(space.data_dir)}</span></div></div>`;
+  $('#space').innerHTML = space.items.map(i => `<div class="li"><div><strong>${esc(i.name)}</strong><span class="d">${esc(i.tool)}${i.where ? ' · ' + esc(i.where) : ''}</span></div><span class="muted">${i.mb} MB</span></div>`).join('')
+    + `<div class="li"><div><strong>数据位置</strong><span class="d mono sel">${esc(space.data_dir)}</span></div></div>`;
 };
 
 /* ---------- 日志 ---------- */
@@ -202,7 +201,7 @@ function showUpdate(info) {
           text().textContent = `正在下载 ${st.detail}`;
           await sleep(UPDATE_POLL_MS);
         }
-        text().textContent = '已经准备好。重启后生效，换包等工具窗口需要先关掉。';
+        text().textContent = '已经准备好。重启后生效，打开着的工具窗口需要先关掉。';
         go.disabled = false; go.textContent = '重启并更新'; go.dataset.s = 'ready';
       };
     },

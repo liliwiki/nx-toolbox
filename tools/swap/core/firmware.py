@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 
 from core import package
-from core.jobs import Job
+from nxhost.jobs import Job
 from nxhost import shared
 
 FIRMWARE_DIR = shared.LEGACY_DIR / "固件"      # 沿用旧版的位置，之前下载的固件还能用

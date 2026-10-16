@@ -60,6 +60,10 @@ def read_tools() -> list[dict]:
         tool["id"] = manifest.parent.name
         tool["dir"] = str((manifest.parent / tool.get("code", ".")).resolve())
         tool["ready"] = (Path(tool["dir"]) / "main.py").is_file()
+        try:
+            tool["icon"] = json.loads((manifest.parent / "icon.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            tool["icon"] = None
         tools.append(tool)
     return sorted(tools, key=lambda t: t.get("order", 99))
 
@@ -183,8 +187,14 @@ class LauncherApi(BaseApi):
         return result
 
     def storage(self) -> dict:
-        return {"firmware_mb": _folder_mb(shared.LEGACY_DIR / "固件"), "snapshots_mb": _folder_mb(shared.DATA_DIR / "snapshots"),
-                "data_dir": str(shared.DATA_DIR)}
+        """各个工具占了多少空间。占用的位置由工具在 tool.json 的 storage 里自己声明。"""
+        items = []
+        for tool in (t for t in read_tools() if t["ready"]):
+            for entry in tool.get("storage", []):
+                moved = shared.load_settings().get(tool["id"], {}).get(entry.get("setting", ""))    # 用户改过位置的话以设置为准
+                folder = Path(moved) if moved else shared.LEGACY_DIR / entry["path"]
+                items.append({"tool": tool["name"], "name": entry["name"], "where": entry.get("where", ""), "mb": _folder_mb(folder)})
+        return {"items": items, "data_dir": str(shared.DATA_DIR)}
 
     def logs(self) -> list[dict]:
         return shared.oplog_list()

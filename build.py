@@ -51,7 +51,7 @@ def build_app() -> None:
     names = sorted(n for n in sys.stdlib_module_names if n not in STDLIB_SKIP and not n.startswith("_"))
     stdlib = [arg for name in names for arg in ("--hidden-import", name, "--collect-submodules", name)]
     pyinstaller("--onedir", "--name", "NXToolbox", "--icon", str(ICON), "--distpath", str(ROOT / "dist"),
-                "--exclude-module", "tkinter", *stdlib, str(ROOT / "host.py"))
+                "--exclude-module", "tkinter", "--collect-submodules", "nxhost", *stdlib, str(ROOT / "host.py"))
     for name in BUNDLED:
         shutil.copytree(ROOT / name, INTERNAL / name, ignore=shutil.ignore_patterns("__pycache__"))
     # 同一个版本号可能重新打包，留一个打包时间让安装程序分得出来

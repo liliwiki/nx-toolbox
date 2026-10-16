@@ -1,0 +1,21 @@
+{
+  "from": "#5AC8FF",
+  "to": "#0A6CFF",
+  "shade": "#0546B8",
+  "layers": [
+    {
+      "d": "M60 54 96 72 60 90 24 72Z",
+      "opacity": 0.34
+    },
+    {
+      "d": "M60 41 96 59 60 77 24 59Z",
+      "opacity": 0.62,
+      "shadow": true
+    },
+    {
+      "d": "M60 28 96 46 60 64 24 46Z",
+      "shadow": true,
+      "front": true
+    }
+  ]
+}

@@ -1,13 +1,15 @@
-"""后台任务：在线程里跑，页面定时来问进度。"""
+"""后台任务：在线程里跑，页面定时来问进度。所有工具共用。"""
 
 from __future__ import annotations
 
 import logging
 import threading
 
-from core.package import Cancelled
-
 logger = logging.getLogger(__name__)
+
+
+class Cancelled(Exception):
+    """用户停止了任务。任务代码在 Job.check() 里收到它，不用自己处理。"""
 
 
 class Job:

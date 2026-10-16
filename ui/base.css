@@ -166,3 +166,13 @@ p{margin:0}svg{flex:none}
 
 @media (max-width:700px){.shell{grid-template-columns:1fr;grid-template-rows:auto 1fr}.side{flex-direction:row;align-items:center;overflow-x:auto;border-right:0;border-bottom:1px solid var(--hair);padding:8px 10px}.brand{display:none}.nav{white-space:nowrap}.page{padding:18px 16px 32px}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* 工具页面里常用的几样 */
+.dev{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dev .ico{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;background:var(--surface);box-shadow:0 0 0 1px var(--hair);color:var(--link)}
+.dev strong{display:block;font-size:15px;font-weight:600}
+.okmark{width:56px;height:56px;color:var(--green)}
+.okmark circle{stroke-dasharray:164;stroke-dashoffset:164;animation:draw .7s var(--ease) .1s forwards}
+.okmark path{stroke-dasharray:40;stroke-dashoffset:40;animation:draw .4s var(--ease) .6s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes spin{to{transform:rotate(360deg)}}

@@ -1,0 +1,17 @@
+{
+  "from": "#C79BFF",
+  "to": "#6E3CF2",
+  "shade": "#3F1BA8",
+  "layers": [
+    {
+      "d": "M68 22 36 66h20l-6 32 34-46H63Z",
+      "opacity": 0.34,
+      "move": "-9 6"
+    },
+    {
+      "d": "M68 22 36 66h20l-6 32 34-46H63Z",
+      "shadow": true,
+      "front": true
+    }
+  ]
+}

@@ -36,39 +36,28 @@ const ic = (n, s = 18, c = '') => `<svg class="${c}" width="${s}" height="${s}" 
 
 // 工具的应用图标。做法参照苹果自己的图标：一个色相的饱满渐变做底，
 // 前景是几块半透明、互相叠压的实心形状，靠透明度分出前后，不加高光条和描边。
-const APP_ICONS = {
-  // 换包：三层叠在一起的"包"
-  swap: { from: '#5AC8FF', to: '#0A6CFF', shade: '#0546B8', art: s => `
-    <g opacity=".34">${s('M60 54 96 72 60 90 24 72Z')}</g>
-    <g opacity=".62" filter="url(#${s.id}s)">${s('M60 41 96 59 60 77 24 59Z')}</g>
-    <g filter="url(#${s.id}s)">${s('M60 28 96 46 60 64 24 46Z', `url(#${s.id}g)`)}</g>` },
-  // 换区：一块圆盘，切出来一角
-  disk: { from: '#FFCB52', to: '#FF7B02', shade: '#B64A00', art: s => `
-    <g opacity=".5">${s('M56 66V34a32 32 0 1 0 32 32Z')}</g>
-    <g filter="url(#${s.id}s)">${s('M65 57V26a31 31 0 0 1 31 31Z', `url(#${s.id}g)`)}</g>` },
-  // 刷机：一道闪电，后面跟着它的影子
-  bolt: { from: '#C79BFF', to: '#6E3CF2', shade: '#3F1BA8', art: s => `
-    <g opacity=".34" transform="translate(-9 6)">${s('M68 22 36 66h20l-6 32 34-46H63Z')}</g>
-    <g filter="url(#${s.id}s)">${s('M68 22 36 66h20l-6 32 34-46H63Z', `url(#${s.id}g)`)}</g>` },
-  // 还没有的工具
-  soon: { from: '#C7C7CC', to: '#8E8E93', shade: '#5B5B60', art: s => `
-    <g opacity=".9" fill="#fff"><circle cx="40" cy="60" r="7"/><circle cx="60" cy="60" r="7"/><circle cx="80" cy="60" r="7"/></g>` },
-};
+// 图标的内容由工具自己提供（工具文件夹里的 icon.json）：
+//   { from, to 底色渐变, shade 投影的颜色, layers: [{ d 形状, opacity, shadow 带投影, front 最前面那层, move 平移 }] }
+// 没有提供的显示成三个点。
+const NO_ICON = { from: '#C7C7CC', to: '#8E8E93', shade: '#5B5B60', layers: [] };
 let appIconCount = 0;
-function appIcon(name, small) {
-  const key = name in APP_ICONS ? name : 'soon', icon = APP_ICONS[key], id = 'ai' + (++appIconCount);
+function appIcon(icon, small) {
+  icon = icon && icon.layers ? icon : NO_ICON;
+  const id = 'ai' + (++appIconCount);
   // 形状用同色粗描边把尖角磨圆
-  const shape = (d, fill = '#fff') => `<path d="${d}" fill="${fill}" stroke="${fill === '#fff' ? '#fff' : '#fff'}" stroke-width="7" stroke-linejoin="round"/>`;
-  shape.id = id;
-  return `<span class="ti ${small ? 'sm' : ''}" style="--i3:${icon.to}"><svg viewBox="0 0 120 120" aria-hidden="true">
+  const art = icon.layers.length ? icon.layers.map(l => {
+    const fill = l.front ? `url(#${id}g)` : '#fff';
+    return `<g${l.opacity ? ` opacity="${+l.opacity}"` : ''}${l.shadow ? ` filter="url(#${id}s)"` : ''}${l.move ? ` transform="translate(${esc(l.move)})"` : ''}><path d="${esc(l.d)}" fill="${fill}" stroke="#fff" stroke-width="7" stroke-linejoin="round"/></g>`;
+  }).join('') : '<g opacity=".9" fill="#fff"><circle cx="40" cy="60" r="7"/><circle cx="60" cy="60" r="7"/><circle cx="80" cy="60" r="7"/></g>';
+  return `<span class="ti ${small ? 'sm' : ''}" style="--i3:${esc(icon.to)}"><svg viewBox="0 0 120 120" aria-hidden="true">
     <defs>
-      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${icon.from}"/><stop offset="1" stop-color="${icon.to}"/></linearGradient>
+      <linearGradient id="${id}b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${esc(icon.from)}"/><stop offset="1" stop-color="${esc(icon.to)}"/></linearGradient>
       <radialGradient id="${id}h" cx=".28" cy=".12" r=".95"><stop offset="0" stop-color="#fff" stop-opacity=".3"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
       <linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity=".86"/></linearGradient>
-      <filter id="${id}s" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="${icon.shade}" flood-opacity=".32"/></filter>
+      <filter id="${id}s" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="${esc(icon.shade)}" flood-opacity=".32"/></filter>
     </defs>
     <rect width="120" height="120" rx="27" fill="url(#${id}b)"/><rect width="120" height="120" rx="27" fill="url(#${id}h)"/>
-    ${icon.art(shape)}</svg></span>`;
+    ${art}</svg></span>`;
 }
 
 function applyTheme(theme) {
@@ -137,3 +126,56 @@ const tell = (title, body) => ask({ title, body, ok: '好', cancel: '' });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (sheetClose) $('#scrim [data-x]')?.click(); $$('.menu.show').forEach(m => m.classList.remove('show')); } });
 document.addEventListener('click', e => { if (!e.target.closest('.menu,[data-menu]')) $$('.menu.show').forEach(m => m.classList.remove('show')); });
 document.addEventListener('contextmenu', e => { if (!e.target.closest('input,.sel')) e.preventDefault(); });
+
+// 做完时画出来的对勾
+const OK_MARK = '<svg class="okmark" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="28" cy="28" r="26" transform="rotate(-90 28 28)"/><path d="m18 29 7 7 14-15"/></svg>';
+
+/* 工具窗口的框架：侧栏切页、导航栏的标题和返回、跟着后台任务走。页面只管往 views 里填内容。
+   state 是页面自己的状态对象，这里只用它的 page 和 job。
+   pages：[{ id, name 侧栏上的名字, title 页面标题, icon, bottom 放在侧栏底部 }]
+   back()：现在能返回的话给出按钮上的字，不能就返回空；onBack()：点了返回之后做什么。 */
+function toolShell({ state, api, brand, pages, views, back = () => '', onBack = () => {} }) {
+  const HIDE_TITLE_AT = 44, POLL_JOB_MS = 150;
+  const main = $('#main'), navbar = $('#navbar'), backBtn = $('#back');
+  const settle = () => navbar.classList.toggle('scrolled', main.scrollTop > HIDE_TITLE_AT);
+  function drawSide() {
+    $('#side').innerHTML = `<div class="brand">${esc(brand)}</div>` + pages.map(p =>
+      `${p.bottom ? '<span class="sp"></span>' : ''}<button class="nav ${state.page === p.id ? 'on' : ''}" data-p="${p.id}" ${state.page === p.id ? 'aria-current="page"' : ''}>${ic(p.icon)}<span>${esc(p.name)}</span></button>`).join('');
+    $$('#side .nav').forEach(x => x.onclick = () => nav(x.dataset.p));
+  }
+  async function nav(p) {
+    if (p === state.page) return;
+    if (state.job) { toast('有任务在进行，完成后再切换'); return; }
+    if (!RM) await Promise.race([$('#page').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 130, fill: 'forwards' }).finished, sleep(180)]);
+    state.page = p; drawSide(); draw();
+  }
+  function draw(still) {
+    const old = $('#page'), pg = document.createElement('div'), top = main.scrollTop;
+    pg.className = 'page' + (still ? ' still' : ''); pg.id = 'page'; old.replaceWith(pg);
+    $('#navtitle').textContent = pages.find(p => p.id === state.page).title;
+    if (backBtn) {
+      const label = state.job ? '' : back();
+      backBtn.hidden = !label;
+      backBtn.innerHTML = label ? ic('chev', 20).replace('<svg', '<svg style="transform:rotate(180deg)"') + esc(label) : '';
+    }
+    views[state.page](pg);
+    main.scrollTop = still ? top : 0;
+    settle();
+  }
+  // 每次进度变化调一次 onTick，结束后返回最后的状态
+  async function follow(onTick) {
+    state.job = true;
+    let last;
+    try {
+      for (;;) { last = await api().progress(); onTick(last); if (!last.running) break; await sleep(POLL_JOB_MS); }
+    } finally { state.job = false; }
+    return last;
+  }
+  const goBack = () => { if (!state.job && back()) onBack(); };
+  if (backBtn) backBtn.onclick = goBack;
+  main.addEventListener('scroll', settle, { passive: true });
+  // 键盘和鼠标侧键也能返回
+  document.addEventListener('keydown', e => { if ((e.altKey && e.key === 'ArrowLeft') || e.key === 'BrowserBack') goBack(); });
+  document.addEventListener('mouseup', e => { if (e.button === 3) goBack(); });
+  return { drawSide, nav, draw, follow };
+}
