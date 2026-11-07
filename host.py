@@ -340,6 +340,9 @@ def main() -> None:
         serve(api, render_page(page), args.port)
         return
 
+    from nxhost import webview2
+    if not webview2.ensure(BASE):                       # 没有它界面就是一片白，先引导装上
+        sys.exit(1)
     import webview
 
     dark = shared.load_settings().get("theme") == "dark"
