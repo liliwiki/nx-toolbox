@@ -16,6 +16,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.needs import CONTENTS, REASONS, Needs
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 SYSTEM_ROOTS = ("emummc", "nintendo")          # 整合包永远不往这里写
@@ -24,7 +26,8 @@ IGNORED_ROOTS = {"system volume information", "$recycle.bin", ".trashes", ".spot
 LINUX_ROOTS = ("lakka", "ubuntu", "android", "lineage")
 MOD_PATCH_DIR = "atmosphere/exefs_patches"
 MOD_PATCH_WORDS = ("fps", "graphics", "mod")
-SWITCH_ROOTS = ("atmosphere", "bootloader", "switch", "config")   # 不是存储卡时，只有这些（和整合包的顶层文件夹）里能清理
+SWITCH_ROOTS = ("atmosphere", "bootloader", "switch", "config")
+PROGRAM_ROOTS = SWITCH_ROOTS      # 程序文件夹：里面的 wav、iso 是程序自带的，不当成用户的影音和 ROM   # 不是存储卡时，只有这些（和整合包的顶层文件夹）里能清理
 LIST_FILES = ("atmosphere/whitelist.txt", "atmosphere/blacklist.txt", "whitelist.txt", "blacklist.txt")
 SD_LIST_DIRS = ("atmosphere", "")
 
@@ -51,6 +54,7 @@ _WHITE_GROUP = {
     "atmosphere/contents": "cheats", "config/nx-mod-manager": "cheats", "mods2": "cheats",
     "atmosphere/automatic_backups": "keys", "switch/prod.keys": "keys",
     "config/jksv": "saves", "switch/jksv": "saves", "jksv": "saves", "autoback": "saves", "switch/autobackup-manager": "saves",
+    "switch/jksv.nro": "saves", "switch/.overlays/ftpautoback.ovl": "saves",
     "switchroot": "linux", "bootloader/ini": "linux", "emuiibo": "amiibo",
     **{p: "emus" for p in (
         "switch/gbastation.nro", "switch/gbastation", "switch/ppsspp", "switch/noods", "switch/noods.nro",
@@ -62,7 +66,7 @@ _WHITE_GROUP = {
 _EXT_GROUP = {
     **{e: "games" for e in ("nsp", "nsz", "xci", "xcz")},
     **{e: "emus" for e in (
-        "nes", "fds", "sfc", "smc", "gb", "gbc", "gba", "nds", "3ds", "cia", "n64", "z64", "v64", "md", "gen", "smd",
+        "nes", "fds", "sfc", "smc", "gb", "gbc", "gba", "nds", "3ds", "cia", "n64", "z64", "v64", "gen", "smd",
         "sms", "gg", "pce", "ngp", "ngc", "ws", "wsc", "a26", "lnx", "32x", "iso", "cso", "chd", "pbp", "gcm", "rvz",
         "wbfs", "cue")},
     **{e: "media" for e in (
@@ -70,17 +74,27 @@ _EXT_GROUP = {
         "ape", "wma", "opus")},
 }
 
-_EXTRA_WHITE = ("bootloader/ini", "switch/retroarch_switch.nro", "switch/retroarch_switch", "switch/retroarch.nro",
+_EXTRA_WHITE = ("bootloader/ini", "switch/JKSV.nro", "switch/retroarch_switch.nro", "switch/retroarch_switch", "switch/retroarch.nro",
                 "switch/retroarch")
 
 WHY = {"user": "你的设置", "black": "黑名单", "white": "白名单", "default": "不在白名单", "on": "整组保留", "off": "整组不保留",
-       "pc": "不是存储卡，不清理"}
+       "pc": "不是存储卡，不清理", **REASONS}
+DEFAULT_WHYS = {"default", *REASONS}     # 这些都是"白名单没管到"，按其余一律清除处理
 
 
-def ext_group(name: str) -> str | None:
-    """按扩展名认出来的类别（游戏、ROM、影音），认不出来返回 None。"""
-    _, dot, ext = name.rpartition(".")
-    return _EXT_GROUP.get(ext.lower()) if dot else None
+def ext_group(path: str) -> str | None:
+    """按扩展名认出来的类别（游戏、ROM、影音），认不出来返回 None。
+
+    path 是卡上的相对路径。程序文件夹里的 ROM、影音扩展名不算（插件自带的音效、资源）；
+    nsp 在程序文件夹里也不算（大气层的 exefs.nsp 是系统模块，switch 里的多半是插件前端），xci、nsz、xcz 哪里都算。
+    """
+    path = norm(path)
+    _, dot, ext = path.rpartition("/")[2].rpartition(".")
+    group = _EXT_GROUP.get(ext) if dot else None
+    top = path.split("/", 1)[0]
+    if group and top in PROGRAM_ROOTS and (group != "games" or ext == "nsp"):
+        return None
+    return group
 
 
 def norm(path: str) -> str:
@@ -134,10 +148,11 @@ class Node:
 class RuleSet:
     def __init__(self, groups: dict[str, bool], user: dict[str, str],
                  extra_white: list[tuple[str, str]], extra_black: list[tuple[str, str]],
-                 package_files: list[str] | None, card: bool = True) -> None:
+                 package_files: list[str] | None, card: bool = True, root: str | None = None) -> None:
         """extra_white / extra_black 是 (路径, 来源)，来源是 "SD 卡" 或 "整合包"。
 
         card=False 表示不是可移动存储卡，只清大气层文件夹里的黑名单和手动标记的。
+        root 是存储卡的位置；给了就会看卡上的实际情况，空的、用不上的白名单项不留（见 needs.py）。
         """
         self.card = card
         self.groups = {**GROUP_DEFAULTS, **{k: v for k, v in groups.items() if k in GROUP_DEFAULTS}}
@@ -152,29 +167,51 @@ class RuleSet:
         self.black += [(norm(p), src, p) for p, src in extra_black if norm(p)]
         package = {norm(f) for f in package_files or []}
         self._package = package | _ancestors(package)
-        self._switch_roots = set(SWITCH_ROOTS) | {f.split("/", 1)[0] for f in package if "/" in f}
+        self._package_tops = {f.split("/", 1)[0] for f in package if "/" in f}
+        self._switch_roots = set(SWITCH_ROOTS) | self._package_tops
         self._user_inner = _ancestors(self.user)
         self._inner = (_ancestors(p for p, *_ in self.white) | _ancestors(p for p, *_ in self.black)
                        | self._user_inner | {"atmosphere", MOD_PATCH_DIR})
+        emu_exts = {e for e, g in _EXT_GROUP.items() if g == "emus"}
+        self.needs = Needs(root, self._package, emu_exts, lambda p: self._evaluate(p).keep) if root else None
+        if self.needs:
+            self._inner.add("bootloader/ini")     # 启动项一个个看
 
     def _black(self, path: str) -> bool:
         return any(under(path, b) for b, *_ in self.black)
 
     def group_of(self, path: str) -> str:
+        return self._classify(path)[0]
+
+    def _classify(self, path: str) -> tuple[str, str | None]:
+        """返回 (类别, 用不上的原因)。白名单管到了但留着没用的，归到"其他文件"，原因见 needs.REASONS。"""
         if self._black(path):
-            return "black"
+            return "black", None
+        parts = path.split("/")
         hit = next((w for w in self.white if under(path, w[0])), None)
         if hit:
-            return hit[2]
-        parts = path.split("/")
-        ext = ext_group(parts[-1])
+            entry = hit[0]
+            if entry in (CONTENTS, "bootloader/ini") and len(parts) > 2:
+                entry = "/".join(parts[:3])       # 金手指按每个游戏、启动项按每个文件看
+            why = self.needs.reason(entry, hit[2]) if self.needs and entry != CONTENTS else None
+            return ("rest", why) if why else (hit[2], None)
+        ext = ext_group(path)
+        if ext == "media" and parts[0] in self._package_tops:
+            return "rest", "plugmedia"      # 整合包自己的文件夹里的音乐、视频是插件带的
+        if ext == "games" and self.needs and path.endswith(".nsp") and not self.needs.official_nsp(path):
+            return "rest", "front"
         if ext:
-            return ext
+            return ext, None
         if parts[0].startswith("l4t-") or parts[0] in LINUX_ROOTS:
-            return "linux"
+            return self._unless_empty("linux", parts[0])
         if path.startswith(MOD_PATCH_DIR + "/") and any(w in parts[2] for w in MOD_PATCH_WORDS):
-            return "cheats"
-        return "rest"
+            return self._unless_empty("cheats", "/".join(parts[:3]))
+        return "rest", None
+
+    def _unless_empty(self, group: str, entry: str) -> tuple[str, str | None]:
+        if self.needs and not self.needs.has_files(entry):
+            return "rest", "empty"
+        return group, None
 
     def user_rule(self, path: str) -> str | None:
         best = max((p for p in self.user if under(path, p)), key=len, default=None)
@@ -182,12 +219,12 @@ class RuleSet:
 
     def evaluate(self, path: str) -> Verdict:
         verdict = self._evaluate(path)
-        if not self.card and not verdict.keep and (verdict.why == "default" or path.split("/", 1)[0] not in self._switch_roots):
+        if not self.card and not verdict.keep and (verdict.why in DEFAULT_WHYS or path.split("/", 1)[0] not in self._switch_roots):
             return Verdict(True, "pc", verdict.group, path in self._package)
         return verdict
 
     def _evaluate(self, path: str) -> Verdict:
-        group = self.group_of(path)
+        group, idle = self._classify(path)
         rule = self.user_rule(path)
         if rule:
             # 手动保留的，连整合包的同名文件也不让盖
@@ -196,7 +233,7 @@ class RuleSet:
         if group == "black":
             return Verdict(True, "on", group, path in self._package) if on else Verdict(False, "black", group)
         if group == "rest":
-            return Verdict(True, "on", group, path in self._package) if on else Verdict(False, "default", group)
+            return Verdict(True, "on", group, path in self._package) if on else Verdict(False, idle or "default", group)
         return Verdict(True, "white", group, path in self._package) if on else Verdict(False, "off", group)
 
     def needs_descent(self, path: str) -> bool:
@@ -244,13 +281,15 @@ def _measure(path: str) -> tuple[int, int]:
     return files, size
 
 
-def _holds_ext(folder: str) -> bool:
+def _holds_ext(folder: str, rel: str) -> bool:
     """文件夹里有没有按扩展名认得出的游戏、影音。
 
     不管那一类开没开都往里走：开着就留下，关着也要单独算进那一类，免得几十 GB 的游戏被当成普通文件夹存进快照。
     """
-    for _, dirs, names in os.walk(folder):
-        if any(ext_group(n) for n in dirs + names):
+    for here, dirs, names in os.walk(folder):
+        sub = os.path.relpath(here, folder).replace("\\", "/")
+        base = rel if sub == "." else f"{rel}/{sub}"
+        if any(ext_group(f"{base}/{n}") for n in dirs + names):
             return True
     return False
 
@@ -274,7 +313,7 @@ def scan(sd_root: str, rules: RuleSet) -> list[Node]:
                 walk(entry.path, path)
                 continue
             verdict = rules.evaluate(key)
-            if is_dir and not verdict.keep and verdict.why == "default" and _holds_ext(entry.path):
+            if is_dir and not verdict.keep and verdict.why in DEFAULT_WHYS and _holds_ext(entry.path, key):
                 # 一个普通文件夹里放了游戏、视频：往里走，只清别的，游戏留下
                 walk(entry.path, path)
                 continue

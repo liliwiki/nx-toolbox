@@ -157,7 +157,8 @@ class Api(BaseApi):
             white += [(p, "整合包") for p in self._listing.lists["white"]]
             black += [(p, "整合包") for p in self._listing.lists["black"]]
         files = self._listing.files if self._listing else None
-        return rules.RuleSet(settings["groups"], settings["user"], white, black, files, sdcard.is_card(card_path))
+        return rules.RuleSet(settings["groups"], settings["user"], white, black, files, sdcard.is_card(card_path),
+                              root=card_path)
 
     def plan(self, card_path: str) -> dict:
         reason = sdcard.check_target(card_path)
