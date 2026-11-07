@@ -87,7 +87,7 @@ class Api(BaseApi):
         return migrate.DiskSource(int(source["number"]))
 
     def check(self, source: dict, target_number: int, sizes: dict | None = None) -> dict:
-        """新卡行不行；行的话告诉页面它会变成什么样。sizes：第几个分区 → 想要的新大小（字节）。"""
+        """新卡行不行；行的话告诉页面它会变成什么样。sizes：分区的 id → 想要的新大小（字节，0 是删掉）。"""
         try:
             target = next((d for d in disk.list_disks() if d["number"] == int(target_number)), None)
             if target is None:
@@ -124,6 +124,7 @@ class Api(BaseApi):
             shared.oplog_add(TOOL_NAME, title, result.pop("log", ""))
             return result
 
+        self._seen.clear()
         self._job = Job(title, steps).start(logged)
         return {"ok": True, "steps": steps}
 
@@ -163,7 +164,71 @@ class Api(BaseApi):
             result["staged"] = staged
             return result
 
-        return self._run("写入新卡", migrate.write_steps(summary, verify), work, "，新卡还没写完，重新开始一次即可")
+        try:
+            steps = migrate.write_steps(summary, verify, sizes)
+        except ERRORS as exc:
+            opened.close()
+            return {"error": str(exc)}
+        return self._run("写入新卡", steps, work, "，新卡还没写完，重新开始一次即可")
+
+    # ---- 单卡调整：先完整存到电脑并核对，再清空这张卡按新布局写回 ----
+
+    def resize_check(self, number: int, sizes: dict | None = None) -> dict:
+        """这张卡按 sizes 重新排会变成什么样，以及电脑上的空间够不够先把它存下来。"""
+        try:
+            number = int(number)
+            summary = self._seen.get(number) or self.inspect(number)
+            if summary.get("error"):
+                return summary
+            target = next((d for d in disk.list_disks() if d["number"] == number), None)
+            if target is None:
+                return {"error": "找不到这张卡了，可能被拔掉了"}
+            source = migrate.DiskSource(number)
+            try:
+                result = migrate.check_target(summary, source.card, target, number, sizes, same=True)
+            finally:
+                source.close()
+            return {"ok": True, "target": target, **result, "stage": self.stage()}
+        except ERRORS as exc:
+            return {"error": str(exc)}
+
+    def start_resize(self, number: int, size: int, sizes: dict | None = None) -> dict:
+        if self._busy():
+            return {"error": "已经有任务在进行"}
+        number = int(number)
+        try:
+            summary = migrate.inspect(number)                  # 马上要清空这张卡，用刚读到的，不用之前记下的
+        except ERRORS as exc:
+            return {"error": str(exc)}
+        self._seen[number] = summary
+        checked = self.resize_check(number, sizes)
+        if checked.get("error"):
+            return checked
+        if checked["target"]["size"] != int(size):
+            return {"error": "这张卡和刚才看到的不是同一张了，请重新选一次"}
+        folder = self._stage_dir()
+        if summary.get("letter") and str(folder).lower().startswith(summary["letter"].lower()):
+            return {"error": "电脑上存放的位置在这张卡上，请在设置里换到电脑硬盘上的文件夹"}
+        stage = checked["stage"]
+        if stage["free"] < summary["copy_bytes"] + migrate.FAT_SLACK:
+            return {"error": f"电脑上的空间不够：先存这张卡需要 {summary['copy_bytes'] / 1073741824:.1f} GB，还剩 {stage['free'] / 1073741824:.1f} GB"}
+        verify = bool(self._settings()["verify"])
+        steps = migrate.save_steps(summary, True) + migrate.write_steps(summary, verify, sizes, same=True)
+
+        def work(job: Job) -> dict:
+            migrate.save(job, number, folder, verify=True)
+            source = migrate.StagedSource(folder)
+            try:
+                result = migrate.write(job, source, number, int(size), verify, sizes, same=True)
+            finally:
+                source.close()
+            result["log"] = (f"{summary['name']} · 重新分区 · {result['files']} 个文件"
+                             + (f" · 调整 {result['resized']} 个" if result["resized"] else "")
+                             + (f" · 删掉 {result['deleted']} 个分区" if result["deleted"] else ""))
+            result["staged"] = True
+            return result
+
+        return self._run("调整分区", steps, work, "。卡上的内容都还存在电脑上：到「换卡」里把电脑上存的内容写回这张卡即可")
 
     def progress(self) -> dict:
         return self._job.snapshot() if self._job else {"running": False, "idle": True}

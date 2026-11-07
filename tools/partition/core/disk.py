@@ -168,12 +168,21 @@ def rescan(number: int) -> None:
         _k32.CloseHandle(handle)
 
 
-def wait_for_volume(number: int, offset: int, seconds: float = VOLUME_WAIT_SECONDS) -> str | None:
-    """等 Windows 把这个位置上的分区挂出来，返回盘符（像 "E:\\"）。"""
+def volume_serial(letter: str) -> int | None:
+    serial = wintypes.DWORD(0)
+    if _k32.GetVolumeInformationW(letter, None, 0, ctypes.byref(serial), None, None, None, 0):
+        return serial.value
+    return None
+
+
+def wait_for_volume(number: int, offset: int, seconds: float = VOLUME_WAIT_SECONDS, serial: int | None = None) -> str | None:
+    """等 Windows 把这个位置上的分区挂出来，返回盘符（像 "E:\\"）。
+    serial 是刚格式化时写进去的卷序列号：同一张卡重新分区时，旧的卷可能还没卸掉，位置又一样，要靠它认出是新的。"""
     deadline = time.time() + seconds
     while time.time() < deadline:
         for volume in volumes():
             if volume["disk"] == number and volume["offset"] == offset and volume["letter"]:
-                return volume["letter"]
+                if serial is None or (volume_serial(volume["letter"]) == serial and os.path.isdir(volume["letter"])):
+                    return volume["letter"]
         time.sleep(0.5)
     return None
