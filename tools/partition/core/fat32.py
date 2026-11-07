@@ -60,7 +60,8 @@ def format_partition(device, start_sector: int, sectors: int, label: str = LABEL
                      start_sector, sectors)
     struct.pack_into("<IHHIHH", boot, 36, fat_sectors, 0, 0, ROOT_CLUSTER, 1, 6)      # FSInfo 在第 1 扇区，备份引导区在第 6
     boot[64], boot[66] = 0x80, 0x29
-    boot[67:71] = os.urandom(4)
+    serial = os.urandom(4)
+    boot[67:71] = serial
     boot[71:82] = name
     boot[82:90] = b"FAT32   "
     boot[510:] = b"\x55\xAA"
@@ -87,4 +88,5 @@ def format_partition(device, start_sector: int, sectors: int, label: str = LABEL
     root = bytearray(SECTOR)
     root[0:11], root[11] = name, _ATTR_VOLUME
     device.write_at(base + (reserved + FATS * fat_sectors) * SECTOR, bytes(root))
-    return {"cluster_bytes": cluster_bytes, "clusters": clusters, "reserved": reserved, "fat_sectors": fat_sectors}
+    return {"cluster_bytes": cluster_bytes, "clusters": clusters, "reserved": reserved, "fat_sectors": fat_sectors,
+            "serial": int.from_bytes(serial, "little")}

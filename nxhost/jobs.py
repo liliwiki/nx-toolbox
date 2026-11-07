@@ -18,7 +18,7 @@ class Job:
         self._cancel = threading.Event()
         self._resume = threading.Event()
         self._resume.set()
-        self._state = {"title": title, "steps": steps, "step": 0, "frac": 0.0, "detail": "", "path": "",
+        self._state = {"title": title, "steps": steps, "step": 0, "frac": 0.0, "detail": "", "path": "", "item": "", "notes": [""] * len(steps),
                        "running": True, "danger": False, "cancelled": False, "error": None, "result": None}
 
     def start(self, work) -> "Job":
@@ -28,6 +28,7 @@ class Job:
     def _run(self, work) -> None:
         try:
             result = work(self)
+            self._close_step()
             self._update(result=result, frac=1.0)
         except Cancelled:
             self._update(cancelled=True)
@@ -47,14 +48,28 @@ class Job:
 
     # ---- 任务代码调用 ----
 
+    def _close_step(self) -> None:
+        """当前这一步做完了：没写过结果的话，把它最后的数量留下来，页面上显示在这一步旁边。"""
+        with self._lock:
+            state = self._state
+            if state["step"] < len(state["notes"]) and not state["notes"][state["step"]]:
+                state["notes"][state["step"]] = state["detail"]
+
+    def note(self, text: str) -> None:
+        """给当前这一步写一句做完之后的结果，比如"18,234 个文件，61.00 GB"。"""
+        with self._lock:
+            self._state["notes"][self._state["step"]] = text
+
     def step(self, name: str, danger: bool | None = None) -> None:
-        changes = {"step": self._state["steps"].index(name), "frac": 0.0, "detail": "", "path": ""}
+        self._close_step()
+        changes = {"step": self._state["steps"].index(name), "frac": 0.0, "detail": "", "path": "", "item": ""}
         if danger is not None:
             changes["danger"] = danger
         self._update(**changes)
 
-    def progress(self, frac: float, detail: str = "", path: str = "") -> None:
-        self._update(frac=max(0.0, min(1.0, frac)), detail=detail, path=path)
+    def progress(self, frac: float, detail: str = "", path: str = "", item: str = "") -> None:
+        """frac 是这一步的进度；detail 是数量（如 1.2 / 3.0 GB）；item 是正在做哪一项；path 是正在处理的东西。"""
+        self._update(frac=max(0.0, min(1.0, frac)), detail=detail, path=path, item=item)
 
     def check(self) -> None:
         """可以安全中断的地方调一下：暂停时在这里等，取消时在这里抛出。"""

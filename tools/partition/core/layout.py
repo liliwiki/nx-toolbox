@@ -85,7 +85,7 @@ class Plan:
     fat: Partition
     moves: list[Move]
     tables: list[tuple[int, bytes]]          # 要写的分区表：(扇区, 内容)
-    sectors: list[tuple[int, int]] = field(default_factory=list)   # 虚拟系统的扇区号：(旧, 新)
+    sectors: list[tuple[int, int | None]] = field(default_factory=list)   # 虚拟系统的扇区号：(旧, 新)；删掉的新的是 None
 
 
 def _mbr_entries(mbr: bytes) -> list[Partition]:
@@ -176,16 +176,23 @@ def scan(device) -> Card:
 
 
 def _gpt_tables(card: Card, total: int, fat: Partition, placed: dict[int, tuple[int, int]]) -> list[tuple[int, bytes]]:
-    """placed：旧的起点 → (新的起点, 新的大小)。"""
+    """placed：旧的起点 → (新的起点, 新的大小)。不在 placed 里的分区是要删掉的，它的表项去掉，后面的往前挪。"""
     count = struct.unpack_from("<I", card.gpt_header, 0x50)[0]
-    entries = bytearray(card.gpt_entries)
+    kept = []
     for slot in range(count):
-        base = slot * GPT_ENTRY_BYTES
-        first = struct.unpack_from("<Q", entries, base + 32)[0]
-        if entries[base:base + 16] == bytes(16) or not first:
+        entry = bytearray(card.gpt_entries[slot * GPT_ENTRY_BYTES:(slot + 1) * GPT_ENTRY_BYTES])
+        first = struct.unpack_from("<Q", entry, 32)[0]
+        if entry[:16] == bytes(16) or not first:
             continue
-        start, size = (fat.start, fat.size) if first == card.fat.start else placed[first]
-        struct.pack_into("<QQ", entries, base + 32, start, start + size - 1)
+        if first == card.fat.start:
+            start, size = fat.start, fat.size
+        elif first in placed:
+            start, size = placed[first]
+        else:
+            continue
+        struct.pack_into("<QQ", entry, 32, start, start + size - 1)
+        kept.append(bytes(entry))
+    entries = bytearray(b"".join(kept).ljust(len(card.gpt_entries), b"\x00"))
     disk_guid = os.urandom(10)
 
     def header(my_lba: int, alt_lba: int, table_lba: int) -> bytes:
@@ -205,39 +212,71 @@ def _gpt_tables(card: Card, total: int, fat: Partition, placed: dict[int, tuple[
             (backup_table, bytes(entries)), (total - 1, header(total - 1, 1, backup_table))]
 
 
+def span_sectors(card: Card, sizes: dict[int, int] | None = None) -> int:
+    """FAT32 后面那些分区按新大小排下来一共占多少扇区（大小为 0 的是删掉的，连同它前面的间隔一起不算）。"""
+    sizes = sizes or {}
+    total, first = 0, True
+    for index, part in enumerate(card.extras):
+        size = sizes.get(index, part.size)
+        if size:
+            total += size + (0 if first else part.start - card.extras[index - 1].end)
+            first = False
+    return total
+
+
 def plan(new_total: int, card: Card, sizes: dict[int, int] | None = None) -> Plan:
-    """给新卡算布局。sizes：第几个分区（按 card.extras 的顺序）→ 新的扇区数，没写的大小不变。"""
+    """给新卡算布局。sizes：第几个分区（按 card.extras 的顺序）→ 新的扇区数；0 是删掉；没写的大小不变。"""
     usable = new_total - new_total % ALIGN_SECTORS
     sizes = sizes or {}
     placed: dict[int, tuple[int, int]] = {}
     moves = []
-    if not card.extras:
+    used = {e.partition: e.used for e in card.emummcs}
+    keep = [i for i, p in enumerate(card.extras) if sizes.get(i, p.size)]
+    if not keep:
         fat = Partition(ALIGN_SECTORS, usable - ALIGN_SECTORS - MB_SECTORS, card.fat.type or TYPE_FAT32, card.fat.name, 0, card.fat.gpt_slot)
     else:
-        new_sizes = [sizes.get(i, p.size) for i, p in enumerate(card.extras)]
-        gaps = [0] + [b.start - a.end for a, b in zip(card.extras, card.extras[1:])]
-        span = sum(new_sizes) + sum(gaps)
-        cursor = (usable - MB_SECTORS - span) // MB_SECTORS * MB_SECTORS           # 末尾留 1 MB，GPT 的备份也放在里面
+        cursor = (usable - MB_SECTORS - span_sectors(card, sizes)) // MB_SECTORS * MB_SECTORS   # 末尾留 1 MB，GPT 的备份也放在里面
         fat = Partition(ALIGN_SECTORS, cursor - ALIGN_SECTORS, card.fat.type, card.fat.name, 0, card.fat.gpt_slot)
-        used = {e.partition: e.used for e in card.emummcs}
-        for part, size, gap in zip(card.extras, new_sizes, gaps):
-            cursor += gap
-            placed[part.start] = (cursor, size)
-            moves.append(Move(part, cursor, size, used.get(part, part.size), card.kind(part)))
-            cursor += size
+    for index, part in enumerate(card.extras):
+        size = sizes.get(index, part.size)
+        if not size:
+            moves.append(Move(part, -1, 0, 0, card.kind(part)))
+            continue
+        cursor += part.start - card.extras[index - 1].end if index and index != keep[0] else 0
+        placed[part.start] = (cursor, size)
+        moves.append(Move(part, cursor, size, used.get(part, part.size), card.kind(part)))
+        cursor += size
     if fat.size < MIN_FAT_SECTORS:
         raise LayoutError("新卡太小：放下虚拟系统这些分区之后，剩不下放文件的空间")
+    # 还剩 Linux 或 Android 才需要 GPT；只剩虚拟系统的话照 hekate 的做法只用 MBR
+    keep_gpt = bool(card.gpt_header) and any(card.kind(card.extras[i]) != "emummc" for i in keep)
     in_mbr = [fat]
+    taken = {0}
     for part in _mbr_entries(card.mbr):
         if part.type == TYPE_GPT:
-            in_mbr.append(Partition(1, min(new_total - 1, 0xFFFFFFFF), TYPE_GPT, mbr_slot=part.mbr_slot))
-        elif part.mbr_slot != 0:
+            if keep_gpt:
+                in_mbr.append(Partition(1, min(new_total - 1, 0xFFFFFFFF), TYPE_GPT, mbr_slot=part.mbr_slot))
+                taken.add(part.mbr_slot)
+        elif part.mbr_slot != 0 and part.start in placed:
             start, size = placed[part.start]
             in_mbr.append(Partition(start, size, part.type, mbr_slot=part.mbr_slot))
+            taken.add(part.mbr_slot)
+    if not keep_gpt:
+        # 原来只记在 GPT 里的虚拟系统分区，去掉 GPT 之后要在 MBR 里占一项
+        for i in keep:
+            part = card.extras[i]
+            if part.mbr_slot < 0:
+                free = [slot for slot in range(1, 4) if slot not in taken]
+                if not free:
+                    raise LayoutError("分区太多，MBR 里放不下了")
+                start, size = placed[part.start]
+                in_mbr.append(Partition(start, size, part.type or TYPE_EMUMMC, mbr_slot=free[0]))
+                taken.add(free[0])
     tables = [(0, mbr_bytes(in_mbr, card.mbr))]
-    if card.gpt_header:
+    if keep_gpt:
         tables += _gpt_tables(card, new_total, fat, placed)
-    sectors = [(e.sector, placed[e.partition.start][0] + e.sector - e.partition.start) for e in card.emummcs]
+    sectors = [(e.sector, placed[e.partition.start][0] + e.sector - e.partition.start if e.partition.start in placed else None)
+               for e in card.emummcs]
     return Plan(fat, moves, tables, sectors)
 
 

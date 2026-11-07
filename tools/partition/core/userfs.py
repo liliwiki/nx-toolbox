@@ -82,7 +82,8 @@ def read_nand(device, offset: int) -> Nand:
         entry = entries[slot * 128:(slot + 1) * 128]
         if entry[56:64] == "USER".encode("utf-16-le"):
             first, last = struct.unpack_from("<QQ", entry, 32)
-            if any(struct.unpack_from("<Q", entries, s * 128 + 32)[0] > first for s in range(count)):
+            # 主机内部存储分过安卓区的话，表里会留着安卓分区的记录，位置在镜像外面，不算数（hekate 也是留着不管）
+            if any(first < struct.unpack_from("<Q", entries, s * 128 + 32)[0] <= last_lba for s in range(count)):
                 raise UserError("USER 不是虚拟系统里的最后一个分区，现在处理不了")
             return Nand(offset, last_lba + 1, device.read_at(offset, SECTOR), header, entries, slot, first, last - first + 1)
     raise UserError("虚拟系统里没有找到 USER 分区")
@@ -99,6 +100,11 @@ def nand_tables(nand: Nand, nand_sectors: int) -> list[tuple[int, bytes]]:
     size = struct.unpack_from("<I", nand.header, 0x0C)[0]
     entries = bytearray(nand.entries)
     struct.pack_into("<Q", entries, nand.user_slot * 128 + 40, nand.user_start + user_sectors_for(nand, nand_sectors) - 1)
+    # 镜像外面那些留下来的旧记录：调大之后会落进镜像里的就清掉，免得和 USER 重叠；其余原样留着
+    for slot in range(count):
+        first = struct.unpack_from("<Q", entries, slot * 128 + 32)[0]
+        if slot != nand.user_slot and nand.sectors <= first < nand_sectors:
+            entries[slot * 128:(slot + 1) * 128] = bytes(128)
 
     def header(my_lba: int, alt_lba: int, table_lba: int) -> bytes:
         data = bytearray(SECTOR)

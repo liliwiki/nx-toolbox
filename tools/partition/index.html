@@ -14,7 +14,12 @@
 .lg{display:flex;gap:6px 16px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
 .lg span{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
 .lg i{width:8px;height:8px;border-radius:50%;flex:none}
-.c-files{background:var(--blue)}.c-free{background:var(--fill-h)}.c-emummc{background:#af52de}.c-linux{background:#ff9f0a}.c-android{background:#30b65a}
+/* 颜色和 hekate 分区管理里的一样：文件绿、虚拟系统红、Linux 青、Android 橙。浅色背景下绿和青稍微压深一点 */
+:root{--c-files:#5FBF00;--c-emu:#FF3C28;--c-linux:#00B4D0;--c-android:#FF8000}
+@media (prefers-color-scheme:dark){:root:not([data-scheme="light"]){--c-files:#96FF00;--c-linux:#00DDFF}}
+:root[data-scheme="dark"]{--c-files:#96FF00;--c-linux:#00DDFF}
+.c-files,.c-fat{background:var(--c-files)}.c-emufile{background:var(--c-emu)}
+.c-files.c-free{background:var(--fill-h)}.c-emummc{background:var(--c-emu)}.c-linux{background:var(--c-linux)}.c-android{background:var(--c-android)}
 .box{padding:16px;display:grid;gap:12px}
 .box h3{display:flex;align-items:center;gap:8px}
 .arrowdown{display:grid;place-items:center;color:var(--faint);margin:-6px 0}
@@ -22,15 +27,41 @@
 .warn{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:12px;background:color-mix(in srgb,var(--orange) 12%,transparent);color:var(--orange);font-size:13px}
 .warn b{font-weight:600}
 /* 步骤 */
-.steps{display:grid;gap:2px;padding:6px 0}
-.st{display:flex;align-items:center;gap:10px;padding:7px 14px;color:var(--faint);transition:color .3s}
-.st .mk{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line);flex:none;transition:background .3s,box-shadow .3s}
-.st.done{color:var(--muted)}.st.done .mk{background:var(--green);box-shadow:none;color:#fff}
-.st.now{color:var(--text);font-weight:500}
-.st.now .mk{box-shadow:none;border:2px solid var(--blue);border-top-color:transparent;animation:spin .8s linear infinite}
-.st.paused .mk{animation-play-state:paused}
-.st .amt{margin-left:auto;font-size:12px;font-weight:400;color:var(--muted);font-variant-numeric:tabular-nums}
-.prog{display:grid;gap:8px;padding:4px 14px 14px}
+/* 进度：当前这一步 */
+.now-card{padding:22px 22px 18px;display:grid;gap:14px}
+.now-top{display:flex;align-items:flex-end;gap:16px}
+.now-top .eb{font-size:12px;font-weight:600;color:var(--link);margin-bottom:4px}
+.now-top h2{font-size:22px;font-weight:600;letter-spacing:-.01em}
+.pct{margin-left:auto;font-size:40px;font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+.pct small{font-size:20px;font-weight:500;color:var(--muted);margin-left:1px;letter-spacing:0}
+.bar{height:8px;border-radius:4px;background:var(--fill);overflow:hidden}
+.bar b{display:block;height:100%;border-radius:4px;background:var(--blue);transform-origin:left;transform:scaleX(0);transition:transform .45s var(--ease),background .3s}
+.paused .bar b{background:var(--faint)}
+.meta{display:flex;gap:12px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:-4px}
+.meta span:last-child{margin-left:auto}
+.cur{display:flex;align-items:center;gap:12px;padding-top:14px;border-top:1px solid var(--hair);min-width:0}
+.cur .gi{color:var(--link)}
+.cur div{min-width:0;flex:1}
+.cur strong{display:block;font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cur span{display:block;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cur span.dir{direction:rtl;text-align:left}
+.cur span bdi{direction:ltr}
+.cur[hidden]{display:none}
+/* 进度：步骤清单，每一步一个进度环 */
+.stl{display:grid}
+.sr{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--hair);color:var(--faint);transition:color .3s}
+.sr:first-child{border-top:0}
+.sr .nm{flex:1;min-width:0}
+.sr .nt{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.sr.done{color:var(--text)}
+.sr.now{color:var(--text);font-weight:500}
+.ring{width:22px;height:22px;flex:none}
+.ring .tk{stroke:var(--fill-h)}
+.ring .ar{stroke:var(--blue);stroke-dasharray:59.7;stroke-dashoffset:59.7;transition:stroke-dashoffset .45s var(--ease)}
+.ring .ok{opacity:0;transform:scale(.6);transform-origin:center;transition:opacity .3s,transform .4s var(--ease)}
+.sr.done .ring .ok{opacity:1;transform:none}
+.sr.done .ring .ar,.sr.done .ring .tk{opacity:0}
+.paused .sr.now .ring .ar{stroke:var(--faint)}
 /* 调大小的滑杆 */
 .size{display:grid;gap:8px}
 .size .hd{display:flex;align-items:baseline;gap:8px}
@@ -41,6 +72,26 @@
 .range:active::-webkit-slider-thumb{transform:scale(1.12)}
 .range:disabled{opacity:.45;cursor:default}
 .ends{display:flex;justify-content:space-between;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+/* 分区列表 */
+.pl{display:grid}
+.pr{display:grid;gap:10px;padding:13px 16px;border-top:1px solid var(--hair);transition:opacity .3s}
+.pr:first-child{border-top:0}
+.pr .hd{display:flex;align-items:center;gap:10px}
+.pr .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.pr .tt{flex:1;min-width:0}
+.pr .tt strong{display:block;font-weight:500}
+.pr .tt span{display:block;font-size:12px;color:var(--muted)}
+.pr .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pr.gone .tt strong,.pr.gone .v{color:var(--faint)}
+.pr.gone .dot{opacity:.35}
+.pr .v.del{color:var(--red);font-weight:500;font-size:13px}
+.pr .acts{display:flex;gap:4px}
+.pr .btn.txt{height:26px}
+.pr .btn.txt.red{color:var(--red)}
+.pr .sz{display:grid;gap:4px;padding-left:20px}
+.pr .hint{font-size:12px;color:var(--muted);padding-left:20px}
+.chg{display:grid;gap:4px;font-size:13px;margin:0;padding-left:18px}
+.chg li.d{color:var(--red)}
 .busy{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--blue);border-top-color:transparent;animation:spin .8s linear infinite;vertical-align:-2px}
 .pick:disabled{opacity:.5;pointer-events:none}
 .navbar .navback[hidden]{display:none}
@@ -57,20 +108,23 @@
 <script>
 let api;
 /* phase：old 选旧卡 → loading → info 看旧卡、选去处 → target 确认新卡 → run → saved 存好了，等新卡 / done */
-const S = { page: 'move', phase: 'old', cards: [], src: null, info: null, stage: null, target: null, sizes: {}, done: null, run: null, job: false, paused: false, opts: {}, notice: '' };
+const S = { page: 'move', phase: 'old', cards: [], src: null, info: null, stage: null, target: null, sizes: {}, done: null, run: null, running: false, R: { phase: 'pick' }, job: false, paused: false, opts: {}, notice: '' };
 const VIEW = {};
 const POLL_CARDS_MS = 1500, GB = 1073741824;
-const KIND = { emummc: '虚拟系统', linux: 'Linux', android: 'Android' };
-const BACK = { info: '换卡', target: '返回' };
-const gb = n => (n / GB >= 100 ? Math.round(n / GB) : (n / GB).toFixed(1)) + ' GB';
+const KIND = { emummc: '虚拟系统', emufile: '虚拟系统', linux: 'Linux', android: 'Android' };
+const BACK = { info: '换卡', target: '返回' }, RBACK = { edit: '调整分区' };
+// 不到 1 GB 的用 MB，免得显示成 0.0 GB
+const gb = n => n < GB ? Math.max(1, Math.round(n / 1048576)) + ' MB' : (n / GB >= 100 ? Math.round(n / GB) : (n / GB).toFixed(1)) + ' GB';
 const cardLine = c => `${gb(c.size)}${c.letters && c.letters.length ? ' · ' + c.letters.map(l => l.replace('\\', '')).join(' ') : ''}`;
 
 /* ---------- 框架 ---------- */
 function reset(notice = '') { S.phase = 'old'; S.src = S.info = S.target = S.done = null; S.sizes = {}; S.notice = notice; }
 const { drawSide, draw, follow } = toolShell({ state: S, api: () => api, brand: '换卡', views: VIEW,
-  pages: [{ id: 'move', name: '换卡', title: '换卡', icon: 'sd' }, { id: 'settings', name: '设置', title: '设置', icon: 'gear', bottom: true }],
-  back: () => S.page === 'move' ? BACK[S.phase] : '',
+  pages: [{ id: 'move', name: '换卡', title: '换卡', icon: 'sd' }, { id: 'resize', name: '调整分区', title: '调整分区', icon: 'layers' },
+    { id: 'settings', name: '设置', title: '设置', icon: 'gear', bottom: true }],
+  back: () => S.running ? '' : S.page === 'move' ? BACK[S.phase] : S.page === 'resize' ? RBACK[S.R.phase] : '',
   onBack: () => {
+    if (S.page === 'resize') { S.R = { phase: 'pick' }; draw(); return; }
     if (S.phase === 'target') { S.target = null; S.phase = S.src.kind === 'stage' ? 'saved' : 'info'; } else reset();
     draw();
   } });
@@ -87,6 +141,8 @@ async function watchCards() {
         if (S.src && S.src.kind === 'disk' && ['info', 'target', 'loading'].includes(S.phase) && !has(S.src.number)) { reset('旧卡已断开。再插上会自动识别。'); if (S.page === 'move') draw(); }
         else if (S.phase === 'target' && !has(S.target.target.number)) { S.target = null; S.phase = S.src.kind === 'stage' ? 'saved' : 'info'; if (S.page === 'move') draw(); toast('新卡已断开'); }
         else if (changed && S.page === 'move' && ['old', 'info', 'saved'].includes(S.phase)) draw(true);
+        if (S.R.number != null && ['edit', 'loading'].includes(S.R.phase) && !has(S.R.number)) { S.R = { phase: 'pick', notice: '这张卡已断开。再插上会自动识别。' }; if (S.page === 'resize') draw(); }
+        else if (changed && S.page === 'resize' && S.R.phase === 'pick') draw(true);
       }
     } catch (e) { /* 下一轮再试 */ }
     await sleep(POLL_CARDS_MS);
@@ -117,7 +173,7 @@ function storage(total, files, fat, extras) {
 const emuText = i => [i.emu_raw ? `分区形式${i.emu_raw > 1 ? ` × ${i.emu_raw}` : ''}` : '', i.emu_file.length ? `文件形式${i.emu_file.length > 1 ? ` × ${i.emu_file.length}` : ''}` : ''].filter(Boolean).join('，') || '没有';
 
 /* ---------- 换卡 ---------- */
-VIEW.move = pg => ({ old: viewOld, loading: viewLoading, info: viewInfo, target: viewTarget, run: viewRun, saved: viewSaved, done: viewDone }[S.phase](pg));
+VIEW.move = pg => S.running ? viewRun(pg) : ({ old: viewOld, loading: viewLoading, info: viewInfo, target: viewTarget, saved: viewSaved, done: viewDone }[S.phase](pg));
 
 function cardList(cards, emptyTitle, emptyText) {
   if (!cards.length) return `<div class="card empty"><div class="slot">${ic('sd', 44)}</div><div><h3>${emptyTitle}</h3><p class="muted" style="margin-top:4px">${emptyText}</p></div></div>`;
@@ -167,83 +223,143 @@ function viewInfo(pg) {
     if (st.saved && !await ask({ title: '电脑上已经存着一张旧卡', body: `${esc(st.saved.name)} 的内容会被这次的替换掉。`, ok: '替换', danger: true })) return;
     const r = await api.start_save(S.src.number);
     if (r.error) { tell('现在开始不了', esc(r.error)); return; }
-    runJob(r.steps, '把旧卡存到电脑', '请不要拔出旧卡。');
+    runJob(r.steps, '把旧卡存到电脑', '请不要拔出旧卡。', moveEnded);
   };
 }
 const STEP = 256 * 1048576;        // 滑杆一格 256 MB
-function sizeBox(e, many) {
-  const title = many ? `虚拟系统 ${e.index + 1}` : '虚拟系统的大小';
-  if (!e.resizable) return `<div class="card box"><h3>${title} <span class="small muted" style="font-weight:400">${gb(e.bytes)}，原样搬过去</span></h3>
-    <p class="small muted">要调整大小，需要这台机器的密钥：在 hekate 里选 Payloads → Lockpick_RCM 导出一次，卡上会多出 switch/prod.keys，再回来换卡。<br>${esc(e.reason)}</p></div>`;
-  const min = Math.ceil(e.min_bytes / STEP) * STEP, max = Math.max(min, Math.floor(e.max_bytes / STEP) * STEP), now = e.new_bytes;
-  return `<div class="card box size" data-i="${e.index}"><div class="hd"><h3>${title}</h3><span class="val" id="val${e.index}">${gb(now)}</span></div>
-    <input class="range" type="range" min="${min}" max="${Math.max(max, e.bytes)}" step="${STEP}" value="${now}" aria-label="${title}" ${max <= min && e.bytes <= min ? 'disabled' : ''}>
-    <div class="ends"><span>最小 ${gb(min)}</span><span>最大 ${gb(Math.max(max, e.bytes))}</span></div>
-    <p class="small muted">原来是 ${gb(e.bytes)}，里面的系统空间用了 ${gb(e.user_used)}，共 ${gb(e.user_bytes)}。调小会把省下的空间让给放文件的地方，调大则相反。${now !== e.bytes ? ' <button class="btn txt" data-reset style="height:auto;padding:0">恢复原来的大小</button>' : ''}</p>
-    <p class="small" style="color:var(--orange)" ${now > e.bytes ? '' : 'hidden'} id="grow${e.index}">调大之后的空间超出了主机机身存储的大小，系统认不认还没有在真机上验证过。</p></div>`;
+const DOT = { emummc: 'c-emummc', emufile: 'c-emummc', linux: 'c-linux', android: 'c-android' };
+/* 卡上所有分区：放文件的空间自动算；虚拟系统可以调大小；能删的可以删（大小调成 0）。
+   t 是 check 的结果，sizes 是现在选的（id → 字节），onChange(新的 sizes) 由页面去重新检查 */
+function partsList(t, sizes, onChange) {
+  const rows = t.parts.map(g => {
+    const gone = !g.new_bytes, changed = g.new_bytes !== g.bytes;
+    let sub = `原来 ${gb(g.bytes)}`;
+    if (g.resizable) sub += ` · 系统空间用了 ${gb(g.user_used)}`;
+    if (g.kind === 'emufile') sub += ' · 在放文件的空间里';
+    const min = g.resizable ? Math.ceil(g.min_bytes / STEP) * STEP : 0, max = g.resizable ? Math.max(min, Math.floor(g.max_bytes / STEP) * STEP, g.bytes) : 0;
+    const slider = g.resizable && !gone ? `<div class="sz"><input class="range" type="range" min="${min}" max="${max}" step="${STEP}" value="${g.new_bytes}" aria-label="${esc(g.label)}的大小" ${max <= min ? 'disabled' : ''}>
+      <div class="ends"><span>最小 ${gb(min)}</span><span>最大 ${gb(max)}</span></div></div>` : '';
+    const hint = !g.resizable && !gone && (g.kind === 'emummc' || g.kind === 'emufile')
+      ? `<div class="hint">要调整大小，需要这台机器的密钥：在 hekate 里选 Payloads → Lockpick_RCM 导出一次，卡上会多出 switch/prod.keys。${g.reason ? '<br>' + esc(g.reason) : ''}</div>`
+      : !g.resizable && !gone && g.reason ? `<div class="hint">${esc(g.reason)}</div>` : '';
+    const acts = [changed && !gone ? '<button class="btn txt" data-act="reset">恢复原大小</button>' : '',
+      g.deletable ? (gone ? '<button class="btn txt" data-act="keep">保留</button>' : '<button class="btn txt red" data-act="del">删除</button>') : ''].join('');
+    return `<div class="pr ${gone ? 'gone' : ''}" data-id="${esc(g.id)}"><div class="hd"><span class="dot ${DOT[g.kind]}"></span>
+      <div class="tt"><strong>${esc(g.label)}</strong><span>${sub}</span></div>
+      <span class="v ${gone ? 'del' : ''}" data-v>${gone ? '将删除' : gb(g.new_bytes)}</span><span class="acts">${acts}</span></div>${slider}${hint}</div>`;
+  }).join('');
+  const html = `<div class="sec">分区 <span>· 虚拟系统可以调大小，分区可以删除</span></div><div class="card pl">
+    <div class="pr"><div class="hd"><span class="dot c-fat"></span><div class="tt"><strong>放文件的空间（FAT32）</strong><span>剩下的空间都给它</span></div><span class="v">${gb(t.fat_bytes)}</span></div></div>${rows}</div>`;
+  const bind = root => $$('.pr[data-id]', root).forEach(row => {
+    const id = row.dataset.id, g = t.parts.find(x => x.id === id), input = $('.range', row);
+    const set = value => { const next = { ...sizes, [id]: value }; if (value === g.bytes) delete next[id]; onChange(next); };
+    if (input) {
+      paintRange(input);
+      input.oninput = () => { paintRange(input); $('[data-v]', row).textContent = gb(+input.value); };
+      input.onchange = () => set(+input.value);
+    }
+    $$('[data-act]', row).forEach(b => b.onclick = () => set(b.dataset.act === 'del' ? 0 : g.bytes));
+  });
+  return { html, bind };
 }
 function paintRange(input) { input.style.setProperty('--fill-to', (input.max > input.min ? (input.value - input.min) / (input.max - input.min) * 100 : 0) + '%'); }
+/* 开始前的确认：列出改了什么，删掉的用红字 */
+function changesText(t) {
+  const items = t.parts.filter(g => g.new_bytes !== g.bytes).map(g => !g.new_bytes
+    ? `<li class="d">删除 ${esc(g.label)}（${gb(g.bytes)}），里面的东西会丢失</li>` : `<li>${esc(g.label)}：${gb(g.bytes)} → ${gb(g.new_bytes)}</li>`);
+  return items.length ? `<ul class="chg">${items.join('')}</ul>` : '';
+}
 function viewTarget(pg) {
   const i = S.info, t = S.target, c = t.target, staged = S.src.kind === 'stage';
-  const delta = t.fat_bytes - i.fat_bytes, emus = t.emus || [];
-  const resized = emus.some(e => e.new_bytes !== e.bytes);
-  pg.innerHTML = `<h1>确认新卡</h1>
-    ${staged ? '' : `<div class="card box"><h3>旧卡 <span class="small muted" style="font-weight:400">${esc(i.name)} · ${gb(i.size)}</span></h3>${storage(i.size, i.files.bytes, i.fat_bytes, i.extras)}</div><div class="arrowdown">${ic('arrow', 20)}</div>`}
-    <div class="card box"><h3>新卡 <span class="small muted" style="font-weight:400">${esc(c.name)} · ${cardLine(c)}</span></h3>${storage(c.size, i.files.bytes, t.fat_bytes, t.extras)}
-      <p class="small muted">${t.extras.length ? (resized ? '虚拟系统按下面选的大小重建，里面的内容不变。' : '虚拟系统等分区原样搬过去，大小不变。') : ''}放文件的空间${delta >= 0 ? '多出' : '减少'} ${gb(Math.abs(delta))}。</p></div>
-    ${emus.map(e => sizeBox(e, emus.length > 1)).join('')}
-    <div class="warn">${ic('lock', 18)}<div><b>新卡上现有的内容会全部清除。</b>请确认上面这张是新卡。${staged ? '' : '旧卡不会被改动。'}</div></div>
-    <div class="row"><button class="btn pri big" id="go">开始换卡</button><span class="small faint">${S.opts.verify ? '写完会把每个文件再核对一遍。' : '写完不核对文件，可以在设置里打开。'}</span></div>`;
-  const apply = async (index, value) => {
-    const e = emus.find(x => x.index === index);
-    const sizes = { ...S.sizes, [index]: value };
-    if (value === e.bytes) delete sizes[index];
+  const delta = t.fat_bytes - i.fat_bytes;
+  const list = partsList(t, S.sizes, async sizes => {
     const r = await api.check(S.src, c.number, sizes);
     if (r.error) { toast(r.error); draw(true); return; }
     S.sizes = sizes; S.target = r; draw(true);
-  };
-  $$('.size', pg).forEach(box => {
-    const index = +box.dataset.i, input = $('.range', box), e = emus.find(x => x.index === index);
-    paintRange(input);
-    input.oninput = () => { paintRange(input); $('#val' + index).textContent = gb(+input.value); $('#grow' + index).hidden = +input.value <= e.bytes; };
-    input.onchange = () => apply(index, +input.value);
-    const back = $('[data-reset]', box);
-    if (back) back.onclick = () => apply(index, e.bytes);
   });
+  pg.innerHTML = `<h1>确认新卡</h1>
+    ${staged ? '' : `<div class="card box"><h3>旧卡 <span class="small muted" style="font-weight:400">${esc(i.name)} · ${gb(i.size)}</span></h3>${storage(i.size, i.files.bytes, i.fat_bytes, i.extras)}</div><div class="arrowdown">${ic('arrow', 20)}</div>`}
+    <div class="card box"><h3>新卡 <span class="small muted" style="font-weight:400">${esc(c.name)} · ${cardLine(c)}</span></h3>${storage(c.size, t.files_bytes, t.fat_bytes, t.extras)}
+      <p class="small muted">放文件的空间${delta >= 0 ? '多出' : '减少'} ${gb(Math.abs(delta))}。</p></div>
+    ${t.parts.length ? list.html : ''}
+    <div class="warn">${ic('lock', 18)}<div><b>新卡上现有的内容会全部清除。</b>请确认上面这张是新卡。${staged ? '' : '旧卡不会被改动。'}</div></div>
+    <div class="row"><button class="btn pri big" id="go">开始换卡</button><span class="small faint">${S.opts.verify ? '写完会把每个文件再核对一遍。' : '写完不核对文件，可以在设置里打开。'}</span></div>`;
+  list.bind(pg);
   $('#go').onclick = async () => {
-    if (!await ask({ title: `清除 ${esc(c.name)} 并开始？`, body: `${cardLine(c)} 上现有的内容会全部清除，这一步不能撤销。`, ok: '清除并开始', danger: true })) return;
+    if (!await ask({ title: `清除 ${esc(c.name)} 并开始？`, body: `${cardLine(c)} 上现有的内容会全部清除，这一步不能撤销。${changesText(t)}`, ok: '清除并开始', danger: true })) return;
     const r = await api.start_write(S.src, c.number, c.size, S.sizes);
     if (r.error) { tell('现在开始不了', esc(r.error)); return; }
-    runJob(r.steps, '写入新卡', '请不要拔出存储卡。');
+    runJob(r.steps, '写入新卡', '请不要拔出存储卡。', moveEnded);
   };
 }
 
 /* ---------- 进度 ---------- */
+const RING = '<svg class="ring" viewBox="0 0 24 24" aria-hidden="true"><circle class="tk" cx="12" cy="12" r="9.5" fill="none" stroke-width="2.5"/><circle class="ar" cx="12" cy="12" r="9.5" fill="none" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90 12 12)"/><g class="ok"><circle cx="12" cy="12" r="11" fill="var(--green)"/><path d="m7.5 12.3 3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></svg>';
 function viewRun(pg) {
   const j = S.run;
   pg.innerHTML = `<h1>${esc(j.title)}</h1>
-    <div class="card"><div class="steps" id="steps">${j.steps.map((s, n) => `<div class="st" data-n="${n}"><span class="mk">${ic('check', 12)}</span><span>${esc(s)}</span><span class="amt"></span></div>`).join('')}</div>
-      <div class="prog"><div class="pbar"><b id="pb"></b></div><div class="path" id="px"></div></div></div>
+    <div class="card now-card" id="nowc">
+      <div class="now-top"><div><div class="eb" id="eb"></div><h2 id="sn"></h2></div><div class="pct" id="pct">0<small>%</small></div></div>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="bar"><b></b></div>
+      <div class="meta"><span id="amt"></span><span id="eta"></span></div>
+      <div class="cur" id="cur" hidden><span class="gi" id="cico"></span><div><strong id="cnm"></strong><span id="cdir"></span></div></div>
+    </div>
+    <div class="sec">全部步骤 <span id="all"></span></div>
+    <div class="card stl">${j.steps.map((s, n) => `<div class="sr" data-n="${n}">${RING}<span class="nm">${esc(s)}</span><span class="nt"></span></div>`).join('')}</div>
     <div class="row"><button class="btn" id="pause">暂停</button><button class="btn" id="stop">停止</button><span class="small faint">${esc(j.hint)}</span></div>`;
-  $$('.st .mk svg', pg).forEach(s => s.style.visibility = 'hidden');
-  $('#pause').onclick = async () => { S.paused = !S.paused; await api.pause(S.paused); $('#pause').textContent = S.paused ? '继续' : '暂停'; $$('.st.now').forEach(x => x.classList.toggle('paused', S.paused)); };
+  $('#pause').onclick = async () => { S.paused = !S.paused; await api.pause(S.paused); $('#pause').textContent = S.paused ? '继续' : '暂停'; pg.classList.toggle('paused', S.paused); };
   $('#stop').onclick = async () => {
-    const writing = j.title === '写入新卡';
-    if (!await ask({ title: '停止？', body: writing ? '新卡会停在写了一半的状态，之后重新开始一次即可。旧卡不受影响。' : '已经存下的部分会留着，下次重新存。', ok: '停止', danger: true })) return;
+    const body = { '写入新卡': '新卡会停在写了一半的状态，之后重新开始一次即可。旧卡不受影响。',
+      '调整分区': '还在存到电脑时停下，卡不受影响；已经开始重建卡之后停下，卡会停在写了一半的状态，内容都还存在电脑上，可以到「换卡」里写回这张卡。' }[j.title] || '已经存下的部分会留着，下次重新存。';
+    if (!await ask({ title: '停止？', body, ok: '停止', danger: true })) return;
     await api.stop();
   };
 }
-async function runJob(steps, title, hint) {
-  S.run = { steps, title, hint }; S.phase = 'run'; S.paused = false; drawSide(); draw();
+/* 正在处理的东西：文件拆成文件名和所在的文件夹，分区直接显示名字 */
+function showCurrent(st) {
+  const cur = $('#cur');
+  if (!cur) return;
+  const path = st.path || '', item = st.item || '', slash = path.lastIndexOf('/');
+  const isFile = slash >= 0 || /\.[A-Za-z0-9]{1,5}$/.test(path);
+  // 文件：名字 + 所在文件夹，第几个文件放到数量那一行；分区：名字 + 正在做的阶段
+  $('#amt').textContent = [isFile ? item : '', st.detail].filter(Boolean).join(' · ');
+  cur.hidden = !path && !item;
+  if (cur.hidden) return;
+  $('#cico').innerHTML = ic(isFile ? 'file' : 'sd', 16);
+  $('#cnm').textContent = path ? path.slice(slash + 1) : item;
+  $('#cnm').title = path;
+  const sub = isFile ? (slash >= 0 ? path.slice(0, slash) : '卡的根目录') : path ? item : '';
+  $('#cdir').className = isFile ? 'dir' : '';
+  $('#cdir').innerHTML = `<bdi>${esc(sub)}</bdi>`;
+}
+const eta = s => s < 60 ? '1 分钟' : s < 3600 ? Math.ceil(s / 60) + ' 分钟' : Math.floor(s / 3600) + ' 小时 ' + Math.ceil(s % 3600 / 60) + ' 分钟';
+async function runJob(steps, title, hint, ended) {
+  S.run = { steps, title, hint }; S.running = true; S.paused = false; drawSide(); draw();
+  const pace = { step: -1, t0: 0, f0: 0 };
   const state = await follow(st => {
-    $$('.st').forEach(el => {
-      const n = +el.dataset.n, cls = n < st.step ? 'done' : n === st.step ? 'now' : '';
-      el.className = 'st ' + cls + (cls === 'now' && S.paused ? ' paused' : '');
-      $('svg', el).style.visibility = cls === 'done' ? 'visible' : 'hidden';
-      $('.amt', el).textContent = cls === 'now' ? st.detail : '';
+    if (!$('#nowc')) return;
+    const finished = !st.running && st.result, frac = finished ? 1 : st.frac;
+    if (pace.step !== st.step) Object.assign(pace, { step: st.step, t0: performance.now(), f0: st.frac });
+    $('#eb').textContent = `第 ${st.step + 1} 步，共 ${st.steps.length} 步`;
+    $('#sn').textContent = st.steps[st.step] || '';
+    $('#pct').firstChild.textContent = Math.floor(frac * 100);
+    $('#bar b').style.transform = `scaleX(${frac})`;
+    $('#bar').setAttribute('aria-valuenow', Math.floor(frac * 100));
+    const spent = (performance.now() - pace.t0) / 1000, gained = st.frac - pace.f0;
+    $('#eta').textContent = S.paused ? '已暂停' : spent > 4 && gained > 0.01 ? '还要约 ' + eta((1 - st.frac) * spent / gained) : (st.frac < 1 ? '正在估算剩余时间…' : '');
+    showCurrent(st);
+    $('#all').textContent = '· 总进度 ' + Math.floor((finished ? 1 : (st.step + st.frac) / st.steps.length) * 100) + '%';
+    $$('.sr').forEach(el => {
+      const n = +el.dataset.n, cls = finished || n < st.step ? 'done' : n === st.step ? 'now' : '';
+      el.className = 'sr ' + cls;
+      $('.ar', el).style.strokeDashoffset = 59.7 * (1 - (cls === 'now' ? frac : 0));
+      $('.nt', el).textContent = cls === 'done' ? (st.notes && st.notes[n]) || '' : cls === 'now' ? Math.floor(frac * 100) + '%' : '';
     });
-    if ($('#pb')) { $('#pb').style.transform = `scaleX(${(st.step + st.frac) / st.steps.length})`; $('#px').textContent = st.path; }
   });
+  S.running = false;
+  await ended(state, title);
+}
+async function moveEnded(state, title) {
   if (state.error || state.cancelled) {
     S.phase = S.src.kind === 'stage' ? 'saved' : 'info'; S.target = null;
     S.stage = await api.stage(); draw();
@@ -265,12 +381,84 @@ function viewSaved(pg) {
 function viewDone(pg) {
   const d = S.done, saved = S.stage && S.stage.saved;
   pg.innerHTML = `${OK_MARK}<div><h1>换好了</h1><p class="lead" style="margin-top:6px">把新卡插回 Switch 就能用。旧卡没有被改动，确认新卡没问题之前先别清空它。</p></div>
-    <div class="card"><dl class="kv"><dt>新卡</dt><dd>${esc(d.name)} · ${gb(d.size)} · ${esc(d.letter.replace('\\', ''))}</dd><dt>文件</dt><dd>${fmt(d.files)} 个，${gb(d.bytes)}</dd>${d.parts ? `<dt>分区</dt><dd>搬了 ${d.parts} 个，已核对</dd>` : ''}${d.changed.length ? `<dt>虚拟系统的位置</dt><dd>已经改成新卡上的位置</dd>` : ''}${d.resized ? `<dt>虚拟系统的大小</dt><dd>已经按选的大小重建，内容核对过</dd>` : ''}<dt>放文件的空间</dt><dd>${gb(d.fat_bytes)}</dd></dl></div>
+    <div class="card"><dl class="kv"><dt>新卡</dt><dd>${esc(d.name)} · ${gb(d.size)} · ${esc(d.letter.replace('\\', ''))}</dd><dt>文件</dt><dd>${fmt(d.files)} 个，${gb(d.bytes)}</dd>${d.parts ? `<dt>分区</dt><dd>搬了 ${d.parts} 个，已核对</dd>` : ''}${d.changed.length ? `<dt>虚拟系统的位置</dt><dd>已经改成新卡上的位置</dd>` : ''}${d.resized ? `<dt>虚拟系统的大小</dt><dd>已经按选的大小重建，内容核对过</dd>` : ''}${d.deleted ? `<dt>删掉的分区</dt><dd>${d.deleted} 个${d.emu_disabled ? '，虚拟系统已改成不启用' : ''}</dd>` : ''}<dt>放文件的空间</dt><dd>${gb(d.fat_bytes)}</dd></dl></div>
     ${d.staged && saved ? `<div class="card"><div class="li"><div><strong>电脑上还存着旧卡的内容</strong><span class="d">占 ${gb(saved.copy_bytes)}。确认新卡没问题之后可以删掉。</span></div><button class="btn" id="drop2">删除</button></div></div>` : ''}
     <div class="row"><button class="btn pri big" id="fin">完成</button></div>`;
   $('#fin').onclick = () => { reset(); draw(); };
   if ($('#drop2')) $('#drop2').onclick = async () => {
     if (!await ask({ title: '删除存在电脑上的旧卡内容？', body: `会释放 ${gb(saved.copy_bytes)}。`, ok: '删除', danger: true })) return;
+    S.stage = await api.discard(); draw(true);
+  };
+}
+
+/* ---------- 调整分区 ---------- */
+VIEW.resize = pg => S.running ? viewRun(pg) : ({ pick: rPick, loading: viewLoading, edit: rEdit, done: rDone }[S.R.phase](pg));
+function rPick(pg) {
+  pg.innerHTML = `<h1>调整分区</h1><p class="lead">调整一张卡上虚拟系统的大小，或者删掉不要的分区。会先把整张卡存到电脑并核对，再清空这张卡按新的分区重建。</p>
+    <div class="sec">选择存储卡</div>
+    ${cardList(S.cards, S.R.notice ? esc(S.R.notice) : (S.notice || '正在等待存储卡…'), '把要调整的卡插到电脑上，会自动出现在这里。')}`;
+  $$('.pick', pg).forEach(b => b.onclick = () => rOpen(S.cards.find(c => c.number === +b.dataset.n)));
+}
+async function rOpen(card) {
+  S.R = { phase: 'loading', number: card.number, sizes: {} }; draw();
+  const info = await api.inspect(card.number);
+  if (S.R.phase !== 'loading' || S.R.number !== card.number) return;
+  if (info.error) { S.R = { phase: 'pick' }; draw(); tell('读不了这张卡', esc(info.error)); return; }
+  const t = await api.resize_check(card.number, {});
+  if (S.R.phase !== 'loading') return;
+  if (t.error) { S.R = { phase: 'pick' }; draw(); tell('这张卡调整不了', esc(t.error)); return; }
+  Object.assign(S.R, { phase: 'edit', info, t }); draw();
+}
+function rEdit(pg) {
+  const { info: i, t } = S.R, st = t.stage, enough = st.free > i.copy_bytes + 128 * 1048576;
+  const changed = Object.keys(S.R.sizes).length > 0, delta = t.fat_bytes - i.fat_bytes;
+  const list = partsList(t, S.R.sizes, async sizes => {
+    const r = await api.resize_check(S.R.number, sizes);
+    if (r.error) { toast(r.error); draw(true); return; }
+    S.R.sizes = sizes; S.R.t = r; draw(true);
+  });
+  pg.innerHTML = `<h1>调整分区</h1>
+    <div class="card box"><div class="dev"><span class="ico">${ic('sd', 22)}</span><div><strong>${esc(i.name)}</strong><span class="small muted">${gb(i.size)}${i.letter ? ' · ' + esc(i.letter.replace('\\', '')) : ''}</span></div></div>
+      <div class="small muted">现在</div>${storage(i.size, i.files.bytes, i.fat_bytes, i.extras)}
+      <div class="small muted" style="margin-top:4px">调整之后</div>${storage(i.size, t.files_bytes, t.fat_bytes, t.extras)}
+      <p class="small muted">${changed ? `放文件的空间${delta >= 0 ? '多出' : '减少'} ${gb(Math.abs(delta))}。` : '还没有改动。在下面调整虚拟系统的大小，或者删掉不要的分区。'}</p></div>
+    ${t.parts.length ? list.html : '<div class="card box"><p class="muted">这张卡上只有放文件的空间，没有可以调整的分区。</p></div>'}
+    <div class="sec">先存到电脑</div>
+    <div class="card"><div class="li"><div><strong>需要 ${gb(i.copy_bytes)}，这个位置还剩 ${gb(st.free)}</strong><span class="d mono">${esc(st.dir)}</span>${enough ? '' : '<span class="d" style="color:var(--red)">空间不够，请换一个位置</span>'}</div><button class="btn" id="chdir">更改…</button></div></div>
+    <div class="warn">${ic('lock', 18)}<div><b>这张卡会被清空，再按新的分区重建。</b>开始前会把整张卡完整存到电脑并核对一遍；中途出了问题，内容也都还在电脑上。</div></div>
+    <div class="row"><button class="btn pri big" id="go" ${changed && enough ? '' : 'disabled'}>开始调整</button><span class="small faint">${changed ? '' : '先在上面做些改动'}</span></div>`;
+  list.bind(pg);
+  $('#chdir').onclick = async () => { const r = await api.pick_stage_dir(); if (!r.cancelled) { S.R.t.stage = r; draw(true); } };
+  $('#go').onclick = async () => {
+    if (!await ask({ title: `调整 ${esc(i.name)}？`, body: `会先把整张卡存到电脑并核对，然后清空这张卡按新的分区重建：${changesText(t)}`, ok: '开始调整', danger: true })) return;
+    const r = await api.start_resize(S.R.number, i.size, S.R.sizes);
+    if (r.error) { tell('现在开始不了', esc(r.error)); return; }
+    runJob(r.steps, '调整分区', '请不要拔出存储卡。', resizeEnded);
+  };
+}
+async function resizeEnded(state) {
+  S.stage = await api.stage();
+  if (state.error || state.cancelled) {
+    const wiped = state.danger;
+    S.R = { phase: 'pick' }; draw();
+    const tail = wiped ? '<br><br>卡已经开始重建了，但卡上原来的内容都完整地存在电脑上。到「换卡」里，用"存在电脑上的旧卡 → 写入新卡"把它写回这张卡即可。' : '<br><br>卡还没有被改动。';
+    if (state.error) tell('调整没有完成', esc(state.error) + tail);
+    else if (wiped) tell('已停止', tail.slice(8));
+    return;
+  }
+  S.R = { phase: 'done', d: state.result }; draw();
+}
+function rDone(pg) {
+  const d = S.R.d, saved = S.stage && S.stage.saved;
+  pg.innerHTML = `${OK_MARK}<div><h1>调整好了</h1><p class="lead" style="margin-top:6px">把卡插回 Switch 就能用。确认没问题之前，先别删电脑上存的那份。</p></div>
+    <div class="card"><dl class="kv"><dt>存储卡</dt><dd>${esc(d.name)} · ${gb(d.size)} · ${esc(d.letter.replace('\\', ''))}</dd><dt>文件</dt><dd>${fmt(d.files)} 个，${gb(d.bytes)}，都核对过</dd>
+      ${d.parts ? `<dt>分区</dt><dd>${d.parts} 个，已核对</dd>` : ''}${d.resized ? `<dt>调整了大小</dt><dd>${d.resized} 个虚拟系统，内容核对过</dd>` : ''}
+      ${d.deleted ? `<dt>删掉的分区</dt><dd>${d.deleted} 个${d.emu_disabled ? '，虚拟系统已改成不启用' : ''}</dd>` : ''}<dt>放文件的空间</dt><dd>${gb(d.fat_bytes)}</dd></dl></div>
+    ${saved ? `<div class="card"><div class="li"><div><strong>电脑上还存着调整前的内容</strong><span class="d">占 ${gb(saved.copy_bytes)}。确认卡没问题之后可以删掉。</span></div><button class="btn" id="drop3">删除</button></div></div>` : ''}
+    <div class="row"><button class="btn pri big" id="fin">完成</button></div>`;
+  $('#fin').onclick = () => { S.R = { phase: 'pick' }; draw(); };
+  if ($('#drop3')) $('#drop3').onclick = async () => {
+    if (!await ask({ title: '删除电脑上存的那份？', body: `会释放 ${gb(saved.copy_bytes)}。`, ok: '删除', danger: true })) return;
     S.stage = await api.discard(); draw(true);
   };
 }
