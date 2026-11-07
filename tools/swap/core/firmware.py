@@ -13,7 +13,7 @@ from nxhost.jobs import Job
 from nxhost import shared
 
 FIRMWARE_DIR = shared.LEGACY_DIR / "固件"      # 沿用旧版的位置，之前下载的固件还能用
-ONLINE_URL = "https://download.liliwiki.com/firmware/NS/"
+ONLINE_URL = "https://download.liliwiki.com/firmware/ns/"
 S_DOWNLOAD, S_EXTRACT, S_COPY = "下载固件", "解压", "复制到存储卡"
 SEARCH_DEPTH = 3
 
