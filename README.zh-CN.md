@@ -66,7 +66,7 @@ build.py           打包并自测
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python -m pip install pywebview pyinstaller
+.venv\Scripts\python -m pip install -r requirements-build.txt
 .venv\Scripts\python host.py                 # 启动器
 .venv\Scripts\python host.py run swap        # 换包工具
 .venv\Scripts\python host.py dev swap        # 在浏览器里调试页面
@@ -78,6 +78,22 @@ python -m venv .venv
 ## 版本
 
 版本号写在 `app.json`。采用[语义化版本](https://semver.org/lang/zh-CN/)，变更记录在 [CHANGELOG.md](CHANGELOG.md)。
+
+## 代码签名政策
+
+Windows 安装程序由 GitHub Actions 上的 [Build 工作流](.github/workflows/build.yml)从本仓库打了标签的源码打包。发布文件的免费代码签名正在向 SignPath.io 申请，证书由 SignPath Foundation 签发；申请通过前，发布文件没有签名。
+
+- 提交与审核：[liliwiki](https://github.com/liliwiki)
+- 批准签名：[liliwiki](https://github.com/liliwiki)
+- 只签本仓库构建出的程序。第三方文件保留原作者的签名或不签名（见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)）。
+
+### 隐私
+
+本程序不收集、不上传个人数据，只在这些功能里联网：
+
+- 检查更新：读取 `https://download.liliwiki.com/toolbox/version.json`，你选择更新时从同一网站下载安装程序。
+- 在线整合包：你选择在线整合包或固件时，从 `https://download.liliwiki.com/` 或你填写的地址读取文件清单并下载。
+- 缺少 WebView2 时，经你同意后用浏览器打开微软的下载地址。
 
 ## 许可证与第三方内容
 
