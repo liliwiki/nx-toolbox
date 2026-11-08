@@ -2,6 +2,7 @@
 
     .venv\\Scripts\\python build.py              完整打包
     .venv\\Scripts\\python build.py --no-build   只重新自测已有的 dist
+    python build.py --stage=app|setup|manifest  CI 用：分步打包，步骤之间签名，不自测
 
 产物：
     dist/NXToolbox/                  程序文件夹（开发时直接运行它）
@@ -108,6 +109,17 @@ def selftest(*args: str) -> dict:
 
 
 def main() -> None:
+    # CI 分三步跑，中间插签名：app 打出程序（签 NXToolbox.exe）→ setup 打出安装程序（签安装程序）→ manifest 按签好的文件写更新清单
+    stage = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--stage=")), "all")
+    if stage == "app":
+        build_app()
+        return
+    if stage == "setup":
+        build_setup(build_payload())
+        return
+    if stage == "manifest":
+        write_manifest(RELEASE / SETUP_NAME)
+        return
     if "--no-build" not in sys.argv:
         build_app()
         write_manifest(build_setup(build_payload()))

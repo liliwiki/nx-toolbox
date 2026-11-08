@@ -66,7 +66,7 @@ The interface is web content running in [pywebview](https://pywebview.flowrl.com
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python -m pip install pywebview pyinstaller
+.venv\Scripts\python -m pip install -r requirements-build.txt
 .venv\Scripts\python host.py                 # launcher
 .venv\Scripts\python host.py run swap        # swap tool
 .venv\Scripts\python host.py dev swap        # debug the page in a browser
@@ -78,6 +78,22 @@ Set `NXTOOLBOX_FAKE_SD=<folder>` to treat an ordinary folder as a storage card w
 ## Versioning
 
 The version is in `app.json`. Releases follow [Semantic Versioning](https://semver.org/); changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
+## Code signing policy
+
+Windows release builds are produced by the [Build workflow](.github/workflows/build.yml) on GitHub Actions from the tagged source in this repository. Free code signing for releases is being requested from SignPath.io, with the certificate issued by SignPath Foundation; until it is granted, release files are unsigned.
+
+- Committers and reviewers: [liliwiki](https://github.com/liliwiki)
+- Approvers (sign releases): [liliwiki](https://github.com/liliwiki)
+- Only binaries built from this repository are signed. Third-party files keep their original publisher's signature or none (see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)).
+
+### Privacy
+
+This program does not collect or send personal data. It contacts the network only for these features:
+
+- Update check: reads `https://download.liliwiki.com/toolbox/version.json` and, when you choose to update, downloads the installer from the same site.
+- Online packages: when you choose an online package or firmware, it reads the file list from, and downloads from, `https://download.liliwiki.com/` or a URL you enter.
+- When WebView2 is missing, it opens Microsoft's download link in your browser if you agree.
 
 ## License and third-party content
 

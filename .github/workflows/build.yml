@@ -1,0 +1,108 @@
+# 在 GitHub 上打包。签名用 SignPath Foundation 的开源代码签名：
+# 仓库变量 SIGNPATH_ORGANIZATION_ID 和密钥 SIGNPATH_API_TOKEN 都配好才会签，没配就打未签名的包。
+# 签名分两次：先签程序 NXToolbox.exe（它会被压进安装程序里），再签安装程序，最后按签好的安装程序写 version.json。
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-build.txt
+
+      - name: Build app
+        run: python build.py --stage=app
+
+      - name: Upload unsigned app
+        id: app-unsigned
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned
+          path: dist/NXToolbox/NXToolbox.exe
+
+      - name: Sign app
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: nx-toolbox
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY || 'release-signing' }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.app-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: dist/NXToolbox
+
+      - name: Build installer
+        run: python build.py --stage=setup
+
+      - name: Upload unsigned installer
+        id: setup-unsigned
+        if: env.SIGN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: release/NXToolbox-*.exe
+
+      - name: Sign installer
+        if: env.SIGN == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: nx-toolbox
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.setup-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: release
+
+      - name: Write update manifest
+        run: python build.py --stage=manifest
+
+      - name: Show hashes
+        shell: pwsh
+        run: |
+          Get-ChildItem release -File | Get-FileHash -Algorithm SHA256 | Format-Table Hash, Path -AutoSize
+          Get-AuthenticodeSignature release/NXToolbox-*.exe | Format-Table Status, SignerCertificate -AutoSize
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: release/
+
+      # 打标签触发时，把安装程序放进同名的 Release；还没有这个 Release 就建一个草稿
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $env:TAG --draft --prerelease:$($env:TAG -match '-') --title $env:TAG --notes "Draft created by the build workflow."
+          }
+          gh release upload $env:TAG (Get-ChildItem release/NXToolbox-*.exe).FullName --clobber
