@@ -23,9 +23,7 @@ Release builds are produced with PyInstaller and include the Python runtime and 
 - bottle, proxy_tools (MIT)
 - Microsoft WebView2 loader, redistributed with pywebview under Microsoft's terms
 
-- Microsoft Edge WebView2 Evergreen Bootstrapper (`vendor/MicrosoftEdgeWebview2Setup.exe`), redistributed unmodified under Microsoft's WebView2 distribution terms - https://developer.microsoft.com/microsoft-edge/webview2/
-
-The WebView2 runtime itself is not bundled; the program uses the one installed on the system. When it is missing (for example on Windows 10 LTSC), the program offers to run the bootstrapper above, which downloads and installs the runtime from Microsoft.
+The WebView2 runtime is not bundled; the program uses the one installed on the system (built into Windows 11). When it is missing (for example on Windows 10 LTSC), the program opens Microsoft's official download link for the Evergreen Bootstrapper in the browser, and the user installs the runtime from Microsoft.
 
 ### External packages and firmware
 
