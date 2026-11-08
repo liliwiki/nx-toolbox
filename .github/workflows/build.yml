@@ -30,6 +30,11 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install -r requirements-build.txt
 
+      - name: Read version
+        id: app
+        shell: pwsh
+        run: '"version=$((Get-Content app.json -Raw | ConvertFrom-Json).version)" >> $env:GITHUB_OUTPUT'
+
       - name: Build app
         run: python build.py --stage=app
 
@@ -53,6 +58,8 @@ jobs:
           github-artifact-id: ${{ steps.app-unsigned.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 3600
+          parameters: |
+            version: "${{ steps.app.outputs.version }}"
           output-artifact-directory: dist/NXToolbox
 
       - name: Build installer
@@ -78,6 +85,8 @@ jobs:
           github-artifact-id: ${{ steps.setup-unsigned.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 3600
+          parameters: |
+            version: "${{ steps.app.outputs.version }}"
           output-artifact-directory: release
 
       - name: Write update manifest

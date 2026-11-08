@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- SignPath 里 slug 为 "app" 的制品配置：GitHub 制品是只装着 NXToolbox.exe 的 zip -->
+<!-- SignPath 里 slug 为 "app" 的制品配置：GitHub 制品是只装着 NXToolbox.exe的 zip。
+     产品名和版本号由 build.py 写进 exe，签名前核对；version 由工作流从 app.json 读出来传进来。 -->
 <artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
   <zip-file>
-    <pe-file path="NXToolbox.exe">
+    <pe-file path="NXToolbox.exe" product-name="nx-toolbox" product-version="${version}">
       <authenticode-sign />
     </pe-file>
   </zip-file>
