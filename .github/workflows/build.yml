@@ -6,6 +6,7 @@ name: Build
 on:
   workflow_dispatch:
   push:
+    branches: ["v2"]      # 平时推代码只检查能不能打包，不签名
     tags: ["v*"]
 
 permissions:
@@ -16,7 +17,7 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      SIGN: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch') }}
     steps:
       - uses: actions/checkout@v4
 
