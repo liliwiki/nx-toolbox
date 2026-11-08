@@ -81,7 +81,7 @@ The version is in `app.json`. Releases follow [Semantic Versioning](https://semv
 
 ## Code signing policy
 
-Windows release builds are produced by the [Build workflow](.github/workflows/build.yml) on GitHub Actions from the tagged source in this repository. Free code signing for releases is being requested from SignPath.io, with the certificate issued by SignPath Foundation; until it is granted, release files are unsigned.
+Windows release builds are produced by the [Build workflow](.github/workflows/build.yml) on GitHub Actions from the tagged source in this repository. Code signing has been requested from the SignPath Foundation open source program; until it is granted, release files are unsigned. Once granted: Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
 
 - Committers and reviewers: [liliwiki](https://github.com/liliwiki)
 - Approvers (sign releases): [liliwiki](https://github.com/liliwiki)

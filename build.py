@@ -43,6 +43,26 @@ STDLIB_SKIP = {"tkinter", "idlelib", "test", "lib2to3", "turtle", "turtledemo", 
                "pydoc_data", "antigravity", "this"}
 
 
+PRODUCT = "nx-toolbox"   # 写进 exe 的产品名，SignPath 按它和版本号核对要签的文件，不能随便改
+
+
+def version_file(name: str, description: str) -> Path:
+    """生成 PyInstaller 用的版本信息文件。exe 属性里的产品名、版本、描述都来自这里。"""
+    nums = (VERSION.split("-")[0].split(".") + ["0"] * 4)[:4]
+    fixed = ", ".join(str(int(n)) for n in nums)
+    strings = {"CompanyName": "Lili", "FileDescription": description, "FileVersion": VERSION,
+               "InternalName": name, "LegalCopyright": "Copyright (c) 2026 Lili. MIT License.",
+               "OriginalFilename": f"{name}.exe", "ProductName": PRODUCT, "ProductVersion": VERSION}
+    table = ", ".join(f"StringStruct({k!r}, {v!r})" for k, v in strings.items())
+    text = (f"VSVersionInfo(ffi=FixedFileInfo(filevers=({fixed}), prodvers=({fixed}), mask=0x3f, flags=0x0, "
+            f"OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)), "
+            f"kids=[StringFileInfo([StringTable('080404B0', [{table}])]), VarFileInfo([VarStruct('Translation', [2052, 1200])])])")
+    WORK.mkdir(exist_ok=True)
+    target = WORK / f"version-{name}.txt"
+    target.write_text(text, encoding="utf-8")
+    return target
+
+
 def pyinstaller(*args: str) -> None:
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed",
                     "--workpath", str(WORK), "--specpath", str(WORK), *args], check=True)
@@ -52,6 +72,7 @@ def build_app() -> None:
     names = sorted(n for n in sys.stdlib_module_names if n not in STDLIB_SKIP and not n.startswith("_"))
     stdlib = [arg for name in names for arg in ("--hidden-import", name, "--collect-submodules", name)]
     pyinstaller("--onedir", "--name", "NXToolbox", "--icon", str(ICON), "--distpath", str(ROOT / "dist"),
+                "--version-file", str(version_file("NXToolbox", "NS 工具箱")),
                 "--exclude-module", "tkinter", "--collect-submodules", "nxhost", *stdlib, str(ROOT / "host.py"))
     for name in BUNDLED:
         shutil.copytree(ROOT / name, INTERNAL / name, ignore=shutil.ignore_patterns("__pycache__"))
@@ -75,6 +96,7 @@ def build_setup(payload: Path) -> Path:
     shutil.rmtree(RELEASE, ignore_errors=True)
     RELEASE.mkdir()
     pyinstaller("--onefile", "--name", SETUP_NAME.removesuffix(".exe"), "--icon", str(ICON), "--distpath", str(RELEASE),
+                "--version-file", str(version_file(SETUP_NAME.removesuffix(".exe"), "NS 工具箱安装程序")),
                 "--add-data", f"{payload};.", "--add-data", f"{INTERNAL / 'app.json'};.", str(ROOT / "bootstrap.py"))
     return RELEASE / SETUP_NAME
 

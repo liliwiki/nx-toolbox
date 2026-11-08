@@ -81,7 +81,7 @@ python -m venv .venv
 
 ## 代码签名政策
 
-Windows 安装程序由 GitHub Actions 上的 [Build 工作流](.github/workflows/build.yml)从本仓库打了标签的源码打包。发布文件的免费代码签名正在向 SignPath.io 申请，证书由 SignPath Foundation 签发；申请通过前，发布文件没有签名。
+Windows 安装程序由 GitHub Actions 上的 [Build 工作流](.github/workflows/build.yml)从本仓库打了标签的源码打包。代码签名已向 SignPath Foundation 开源计划申请，通过前发布文件没有签名。通过后：Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org)（由 SignPath.io 免费提供代码签名，证书由 SignPath Foundation 签发）。
 
 - 提交与审核：[liliwiki](https://github.com/liliwiki)
 - 批准签名：[liliwiki](https://github.com/liliwiki)
