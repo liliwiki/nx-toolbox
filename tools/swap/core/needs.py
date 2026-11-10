@@ -188,7 +188,8 @@ class Needs:
         if not self.has_files("switchroot"):
             return "linux"
         try:
-            text = open(self._full(entry), encoding="utf-8", errors="replace").read(65536)
+            with open(self._full(entry), encoding="utf-8", errors="replace") as f:
+                text = f.read(65536)
         except OSError:
             return None     # 是文件夹或读不了，不乱删
         return None if LINUX_INI.search(text) else "notlinux"
