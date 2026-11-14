@@ -17,6 +17,7 @@ switch/noods.nro
 switch/FlashNX.nro
 switch/FlashNX
 switch/dusklight.nro
+switch/dusklight
 switchroot
 mods2
 JKSV
@@ -33,5 +34,6 @@ AutoBack
 flashnx
 GBAStation
 Theme
+themes
 dusk
 TwilitRealm
