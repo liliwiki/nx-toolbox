@@ -16,7 +16,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from core.needs import CONTENTS, REASONS, Needs
+from core.needs import CONTENTS, REASONS, Needs, emummc_dirs
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -33,7 +33,7 @@ SD_LIST_DIRS = ("atmosphere", "")
 
 # kind: guard = 白名单，取消保留前要再确认一次；keep = 白名单；clear = 默认清除
 GROUPS = [
-    {"id": "emu", "kind": "guard", "icon": "game", "name": "正版系统和虚拟系统", "desc": "Nintendo 和 emuMMC 文件夹"},
+    {"id": "emu", "kind": "guard", "icon": "game", "name": "正版系统和虚拟系统", "desc": "Nintendo、emuMMC，和 SX OS 时期虚拟系统的 Emutendo 文件夹"},
     {"id": "keys", "kind": "guard", "icon": "key", "name": "密钥和联网证书", "desc": "给真实系统刷机用。没有它，刷机只能刷成被封禁（ban）的机器"},
     {"id": "saves", "kind": "keep", "icon": "save", "name": "存档备份", "desc": "JKSV 等工具导出的存档"},
     {"id": "cheats", "kind": "keep", "icon": "spark", "name": "金手指和 MOD", "desc": "各个游戏的 cheats、romfs、exefs"},
@@ -42,7 +42,7 @@ GROUPS = [
     {"id": "media", "kind": "guard", "icon": "file", "name": "视频和音乐", "desc": "放在卡上的 mp4、mkv、mp3、flac 等"},
     {"id": "amiibo", "kind": "keep", "icon": "tag", "name": "Amiibo 数据", "desc": "emuiibo 里的虚拟 Amiibo"},
     {"id": "linux", "kind": "keep", "icon": "layers", "name": "安卓和 Linux", "desc": "switchroot 和它的启动项"},
-    {"id": "misc", "kind": "keep", "icon": "list", "name": "白名单里的其他内容", "desc": "FTP、网盘等工具的配置，和名单文件本身"},
+    {"id": "misc", "kind": "keep", "icon": "list", "name": "白名单里的其他内容", "desc": "FTP、网盘等工具的配置，主题，和名单文件本身"},
     {"id": "black", "kind": "clear", "icon": "plug", "name": "黑名单", "desc": "会冲突的旧插件、系统模块和主题，不清掉可能开机报错"},
     {"id": "rest", "kind": "clear", "icon": "folder", "name": "其他文件", "desc": "不在白名单里的都会清掉，再装上新的整合包"},
 ]
@@ -56,11 +56,13 @@ _WHITE_GROUP = {
     "config/jksv": "saves", "switch/jksv": "saves", "jksv": "saves", "autoback": "saves", "switch/autobackup-manager": "saves",
     "switch/jksv.nro": "saves", "switch/.overlays/ftpautoback.ovl": "saves",
     "switchroot": "linux", "bootloader/ini": "linux", "emuiibo": "amiibo",
+    "emutendo": "emu",     # SX OS 的虚拟系统把 SD 卡上的 Nintendo 文件夹叫 Emutendo
     **{p: "emus" for p in (
         "switch/gbastation.nro", "switch/gbastation", "switch/ppsspp", "switch/noods", "switch/noods.nro",
-        "switch/flashnx.nro", "switch/flashnx", "switch/dusklight.nro", "roms", "rom", "onsemu", "sloop+", "retroarch",
+        "switch/flashnx.nro", "switch/flashnx", "switch/dusklight.nro", "switch/dusklight", "roms", "rom", "onsemu",
+        "sloop+", "retroarch",
         "switch/retroarch_switch.nro", "switch/retroarch_switch", "switch/retroarch.nro", "switch/retroarch",
-        "nds", "tico", "emutendo", "flashnx", "gbastation", "dusk", "twilitrealm")},
+        "nds", "tico", "flashnx", "gbastation", "dusk", "twilitrealm")},
 }
 # 按扩展名认出来的用户文件，在卡上哪里都保留（拆分的大游戏是一个叫 xxx.nsp 的文件夹，也算）
 _EXT_GROUP = {
@@ -173,9 +175,18 @@ class RuleSet:
         self._inner = (_ancestors(p for p, *_ in self.white) | _ancestors(p for p, *_ in self.black)
                        | self._user_inner | {"atmosphere", MOD_PATCH_DIR})
         emu_exts = {e for e, g in _EXT_GROUP.items() if g == "emus"}
+        self._emummc: list[str] = []
         self.needs = Needs(root, self._package, emu_exts, lambda p: self._evaluate(p).keep) if root else None
         if self.needs:
             self._inner.add("bootloader/ini")     # 启动项一个个看
+            # emummc.ini 指到的虚拟系统文件夹：比黑名单优先，在黑名单文件夹里（比如 sxos/emunand）也不能删
+            self._emummc = emummc_dirs(root)
+            for path in self._emummc:
+                self.white.insert(0, (path, "emummc.ini", "emu", path))
+                self._inner |= _ancestors([path])
+            if self.needs.jksv_dir:               # JKSV 设置里改过存档文件夹，那里也是存档
+                self.white.insert(0, (self.needs.jksv_dir, "JKSV 设置", "saves", self.needs.jksv_dir))
+                self._inner |= _ancestors([self.needs.jksv_dir])
 
     def _black(self, path: str) -> bool:
         return any(under(path, b) for b, *_ in self.black)
@@ -185,6 +196,8 @@ class RuleSet:
 
     def _classify(self, path: str) -> tuple[str, str | None]:
         """返回 (类别, 用不上的原因)。白名单管到了但留着没用的，归到"其他文件"，原因见 needs.REASONS。"""
+        if any(under(path, p) for p in self._emummc):
+            return "emu", None
         if self._black(path):
             return "black", None
         parts = path.split("/")
@@ -209,8 +222,8 @@ class RuleSet:
         return "rest", None
 
     def _unless_empty(self, group: str, entry: str) -> tuple[str, str | None]:
-        if self.needs and not self.needs.has_files(entry):
-            return "rest", "empty"
+        if self.needs and not self.needs.has_data(entry):
+            return "rest", self.needs.profile(entry).why
         return group, None
 
     def user_rule(self, path: str) -> str | None:
@@ -240,6 +253,8 @@ class RuleSet:
         """文件夹里面有没有处理方式不一样的东西；没有就整个当一项。"""
         if path in self._user_inner:
             return True
+        if any(under(p, path) and p != path for p in self._emummc):
+            return True                         # 黑名单文件夹里有虚拟系统，往里走
         if self._black(path):
             return False
         return path in self._inner
