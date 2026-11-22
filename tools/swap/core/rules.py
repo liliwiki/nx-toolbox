@@ -16,6 +16,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from core import patches
 from core.needs import CONTENTS, REASONS, Needs, emummc_dirs
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -24,8 +25,7 @@ SYSTEM_ROOTS = ("emummc", "nintendo")          # 整合包永远不往这里写
 SYSTEM_ROOT_NAMES = {"emummc": "emuMMC", "nintendo": "Nintendo"}
 IGNORED_ROOTS = {"system volume information", "$recycle.bin", ".trashes", ".spotlight-v100", ".fseventsd"}
 LINUX_ROOTS = ("lakka", "ubuntu", "android", "lineage")
-MOD_PATCH_DIR = "atmosphere/exefs_patches"
-MOD_PATCH_WORDS = ("fps", "graphics", "mod")
+MOD_PATCH_DIRS = patches.PATCH_DIRS   # 画质、帧率 MOD 和系统补丁混放在这里，按补丁打给谁来分，见 patches.py
 SWITCH_ROOTS = ("atmosphere", "bootloader", "switch", "config")
 PROGRAM_ROOTS = SWITCH_ROOTS      # 程序文件夹：里面的 wav、iso 是程序自带的，不当成用户的影音和 ROM   # 不是存储卡时，只有这些（和整合包的顶层文件夹）里能清理
 LIST_FILES = ("atmosphere/whitelist.txt", "atmosphere/blacklist.txt", "whitelist.txt", "blacklist.txt")
@@ -33,18 +33,18 @@ SD_LIST_DIRS = ("atmosphere", "")
 
 # kind: guard = 白名单，取消保留前要再确认一次；keep = 白名单；clear = 默认清除
 GROUPS = [
-    {"id": "emu", "kind": "guard", "icon": "game", "name": "正版系统和虚拟系统", "desc": "Nintendo、emuMMC，和 SX OS 时期虚拟系统的 Emutendo 文件夹"},
-    {"id": "keys", "kind": "guard", "icon": "key", "name": "密钥和联网证书", "desc": "给真实系统刷机用。没有它，刷机只能刷成被封禁（ban）的机器"},
-    {"id": "saves", "kind": "keep", "icon": "save", "name": "存档备份", "desc": "JKSV 等工具导出的存档"},
-    {"id": "cheats", "kind": "keep", "icon": "spark", "name": "金手指和 MOD", "desc": "各个游戏的 cheats、romfs、exefs"},
-    {"id": "games", "kind": "guard", "icon": "box", "name": "游戏安装包", "desc": "放在卡上的 nsp、nsz、xci、xcz 文件"},
-    {"id": "emus", "kind": "keep", "icon": "pad", "name": "模拟器和 ROM", "desc": "RetroArch、PPSSPP、ONS 等和它们的游戏"},
-    {"id": "media", "kind": "guard", "icon": "file", "name": "视频和音乐", "desc": "放在卡上的 mp4、mkv、mp3、flac 等"},
-    {"id": "amiibo", "kind": "keep", "icon": "tag", "name": "Amiibo 数据", "desc": "emuiibo 里的虚拟 Amiibo"},
-    {"id": "linux", "kind": "keep", "icon": "layers", "name": "安卓和 Linux", "desc": "switchroot 和它的启动项"},
-    {"id": "misc", "kind": "keep", "icon": "list", "name": "白名单里的其他内容", "desc": "FTP、网盘等工具的配置，主题，和名单文件本身"},
-    {"id": "black", "kind": "clear", "icon": "plug", "name": "黑名单", "desc": "会冲突的旧插件、系统模块和主题，不清掉可能开机报错"},
-    {"id": "rest", "kind": "clear", "icon": "folder", "name": "其他文件", "desc": "不在白名单里的都会清掉，再装上新的整合包"},
+    {"id": "emu", "kind": "guard", "icon": "game", "name": "正版系统和虚拟系统", "desc": "正版数据和虚拟系统"},
+    {"id": "keys", "kind": "guard", "icon": "key", "name": "密钥和联网证书", "desc": "刷机救砖要用"},
+    {"id": "saves", "kind": "keep", "icon": "save", "name": "存档备份", "desc": "备份下来的游戏存档"},
+    {"id": "cheats", "kind": "keep", "icon": "spark", "name": "金手指和 MOD", "desc": "各个游戏的金手指和 MOD"},
+    {"id": "games", "kind": "guard", "icon": "box", "name": "游戏安装包", "desc": "放在卡上还没安装的游戏"},
+    {"id": "emus", "kind": "keep", "icon": "pad", "name": "模拟器和 ROM", "desc": "模拟器和里面的游戏、存档"},
+    {"id": "media", "kind": "guard", "icon": "file", "name": "视频和音乐", "desc": "自己放进卡里的视频和音乐"},
+    {"id": "amiibo", "kind": "keep", "icon": "tag", "name": "Amiibo 数据", "desc": "模拟的 Amiibo"},
+    {"id": "linux", "kind": "keep", "icon": "layers", "name": "安卓和 Linux", "desc": "装在卡上的安卓、Linux 系统"},
+    {"id": "misc", "kind": "keep", "icon": "list", "name": "白名单里的其他内容", "desc": "插件设置、主题等"},
+    {"id": "black", "kind": "clear", "icon": "plug", "name": "黑名单", "desc": "旧插件和主题，留着可能开不了机"},
+    {"id": "rest", "kind": "clear", "icon": "folder", "name": "其他文件", "desc": "旧整合包的文件，会换成新的"},
 ]
 NO_SNAPSHOT = ("emu", "games", "media")     # 动辄几十 GB，不进快照
 GROUP_DEFAULTS = {g["id"]: g["kind"] != "clear" for g in GROUPS}
@@ -53,6 +53,7 @@ GROUP_DEFAULTS = {g["id"]: g["kind"] != "clear" for g in GROUPS}
 _WHITE_GROUP = {
     "atmosphere/contents": "cheats", "config/nx-mod-manager": "cheats", "mods2": "cheats",
     "atmosphere/automatic_backups": "keys", "switch/prod.keys": "keys",
+    "atmosphere/saves": "saves",
     "config/jksv": "saves", "switch/jksv": "saves", "jksv": "saves", "autoback": "saves", "switch/autobackup-manager": "saves",
     "switch/jksv.nro": "saves", "switch/.overlays/ftpautoback.ovl": "saves",
     "switchroot": "linux", "bootloader/ini": "linux", "emuiibo": "amiibo",
@@ -80,7 +81,7 @@ _EXTRA_WHITE = ("bootloader/ini", "switch/JKSV.nro", "switch/retroarch_switch.nr
                 "switch/retroarch")
 
 WHY = {"user": "你的设置", "black": "黑名单", "white": "白名单", "default": "不在白名单", "on": "整组保留", "off": "整组不保留",
-       "pc": "不是存储卡，不清理", **REASONS}
+       "pc": "不是存储卡，不清理", "patchmod": "游戏补丁", **REASONS}
 DEFAULT_WHYS = {"default", *REASONS}     # 这些都是"白名单没管到"，按其余一律清除处理
 
 
@@ -150,7 +151,8 @@ class Node:
 class RuleSet:
     def __init__(self, groups: dict[str, bool], user: dict[str, str],
                  extra_white: list[tuple[str, str]], extra_black: list[tuple[str, str]],
-                 package_files: list[str] | None, card: bool = True, root: str | None = None) -> None:
+                 package_files: list[str] | None, card: bool = True, root: str | None = None,
+                 known_patch_ids: set[str] | None = None) -> None:
         """extra_white / extra_black 是 (路径, 来源)，来源是 "SD 卡" 或 "整合包"。
 
         card=False 表示不是可移动存储卡，只清大气层文件夹里的黑名单和手动标记的。
@@ -170,10 +172,14 @@ class RuleSet:
         package = {norm(f) for f in package_files or []}
         self._package = package | _ancestors(package)
         self._package_tops = {f.split("/", 1)[0] for f in package if "/" in f}
+        # 系统模块的 Build ID：新整合包带的，加上以前读过的整合包里见过的
+        self._system_ids = patches.package_ids(package) | set(known_patch_ids or ())
+        self._root = root
+        self._patch_folders: dict[str, tuple[patches.PatchFolder, str | None]] = {}
         self._switch_roots = set(SWITCH_ROOTS) | self._package_tops
         self._user_inner = _ancestors(self.user)
         self._inner = (_ancestors(p for p, *_ in self.white) | _ancestors(p for p, *_ in self.black)
-                       | self._user_inner | {"atmosphere", MOD_PATCH_DIR})
+                       | self._user_inner | {"atmosphere", *MOD_PATCH_DIRS})
         emu_exts = {e for e, g in _EXT_GROUP.items() if g == "emus"}
         self._emummc: list[str] = []
         self.needs = Needs(root, self._package, emu_exts, lambda p: self._evaluate(p).keep) if root else None
@@ -189,7 +195,17 @@ class RuleSet:
                 self._inner |= _ancestors([self.needs.jksv_dir])
 
     def _black(self, path: str) -> bool:
-        return any(under(path, b) for b, *_ in self.black)
+        hits = [b for b, *_ in self.black if under(path, b)]
+        if hits and all(b in MOD_PATCH_DIRS for b in hits) and self._patch_mod(path):
+            # 整合包（包括卡上旧包留下的名单）常把整个 exefs_patches 拉黑，本意是清掉旧的系统补丁；
+            # 里面用户自己装的游戏 MOD 不跟着清，系统补丁照样按黑名单清
+            return False
+        return bool(hits)
+
+    def _patch_mod(self, path: str) -> bool:
+        parts = path.split("/")
+        return (len(parts) > 2 and "/".join(parts[:2]) in MOD_PATCH_DIRS and bool(self._root)
+                and self.patch_folder("/".join(parts[:3]))[1] is None)
 
     def group_of(self, path: str) -> str:
         return self._classify(path)[0]
@@ -217,9 +233,18 @@ class RuleSet:
             return ext, None
         if parts[0].startswith("l4t-") or parts[0] in LINUX_ROOTS:
             return self._unless_empty("linux", parts[0])
-        if path.startswith(MOD_PATCH_DIR + "/") and any(w in parts[2] for w in MOD_PATCH_WORDS):
-            return self._unless_empty("cheats", "/".join(parts[:3]))
+        if "/".join(parts[:2]) in MOD_PATCH_DIRS and len(parts) > 2 and self._root:
+            why = self.patch_folder("/".join(parts[:3]))[1]
+            return ("rest", why) if why else ("cheats", None)
         return "rest", None
+
+    def patch_folder(self, entry: str) -> tuple[patches.PatchFolder, str | None]:
+        """exefs_patches/<名字>：里面有什么补丁，和不用留的原因（是游戏 MOD 就是 None）。"""
+        if entry not in self._patch_folders:
+            full = os.path.join(self._root, *entry.split("/"))
+            info = patches.read_folder(full) if os.path.isdir(full) else patches.PatchFolder()
+            self._patch_folders[entry] = (info, patches.judge(entry.rsplit("/", 1)[1], info, self._system_ids))
+        return self._patch_folders[entry]
 
     def _unless_empty(self, group: str, entry: str) -> tuple[str, str | None]:
         if self.needs and not self.needs.has_data(entry):
@@ -247,7 +272,8 @@ class RuleSet:
             return Verdict(True, "on", group, path in self._package) if on else Verdict(False, "black", group)
         if group == "rest":
             return Verdict(True, "on", group, path in self._package) if on else Verdict(False, idle or "default", group)
-        return Verdict(True, "white", group, path in self._package) if on else Verdict(False, "off", group)
+        kept = "patchmod" if group == "cheats" and "/".join(path.split("/")[:2]) in MOD_PATCH_DIRS else "white"
+        return Verdict(True, kept, group, path in self._package) if on else Verdict(False, "off", group)
 
     def needs_descent(self, path: str) -> bool:
         """文件夹里面有没有处理方式不一样的东西；没有就整个当一项。"""
@@ -255,6 +281,8 @@ class RuleSet:
             return True
         if any(under(p, path) and p != path for p in self._emummc):
             return True                         # 黑名单文件夹里有虚拟系统，往里走
+        if path in MOD_PATCH_DIRS:
+            return True                         # 补丁文件夹被整个拉黑时也往里走，游戏 MOD 要单独留
         if self._black(path):
             return False
         return path in self._inner

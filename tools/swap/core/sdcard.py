@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import struct
@@ -73,6 +74,38 @@ def info(path: str) -> dict:
         "total_gb": round(total, 1), "free_gb": round(free, 1), "used_gb": round(total - free, 1),
         "ams": ams, "hos": hos, "looks_like_sd": is_switch_sd(path), "is_drive": is_root, "is_card": is_card(path),
     }
+
+
+STAMP_DEPTH = 4                  # 往下看几层：装固件、拷 MOD、删插件都会动到这几层
+STAMP_MAX_ENTRIES = 20000        # 卡上东西特别多时只看前面这些，免得每次轮询都很慢
+STAMP_SKIP = {"emummc", "nintendo", "system volume information", "$recycle.bin"}   # 系统数据很大，只看在不在
+
+
+def stamp(path: str) -> str:
+    """卡上内容的指纹：文件夹和文件的名字、大小、修改时间。卡上的东西变了（装了固件、在资源管理器里拷了文件），
+    指纹就会变，界面据此重新计算要清哪些。只是比较用，不保证每个改动都能看到（比如很深的文件夹里改了内容）。"""
+    digest, count = hashlib.blake2b(digest_size=16), 0
+    stack = [(path, "", 0)]
+    while stack and count < STAMP_MAX_ENTRIES:
+        full, rel, depth = stack.pop()
+        try:
+            entries = sorted(os.scandir(full), key=lambda e: e.name)
+        except OSError:
+            continue
+        for entry in entries:
+            count += 1
+            name = rel + "/" + entry.name
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    digest.update(f"D{name}\0".encode("utf-8", "surrogatepass"))
+                    if depth + 1 < STAMP_DEPTH and not (depth == 0 and entry.name.lower() in STAMP_SKIP):
+                        stack.append((entry.path, name, depth + 1))
+                else:
+                    st = entry.stat(follow_symlinks=False)
+                    digest.update(f"F{name}\0{st.st_size}\0{int(st.st_mtime)}\0".encode("utf-8", "surrogatepass"))
+            except OSError:
+                continue
+    return digest.hexdigest()
 
 
 def detect() -> list[dict]:

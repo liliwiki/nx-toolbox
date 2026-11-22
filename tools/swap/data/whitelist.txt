@@ -1,5 +1,7 @@
 atmosphere/contents
 atmosphere/automatic_backups
+atmosphere/hosts
+atmosphere/saves
 config/JKSV
 config/cloud-file
 config/cloud-quark

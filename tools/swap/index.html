@@ -75,9 +75,9 @@
 <script>
 let api;
 const S = { page: 'update', phase: 'empty', cards: [], card: null, plan: null, source: { kind: 'none' }, sourceBusy: true,
-  open: new Set(), openDirs: new Set(), lazy: new Map(), loading: new Set(), justOpened: null, opts: {}, done: null, job: false, skip: null, notice: '' };
+  open: new Set(), openDirs: new Set(), lazy: new Map(), loading: new Set(), justOpened: null, opts: {}, done: null, job: false, skip: null, notice: '', stamp: null };
 const VIEW = {};
-const POLL_CARDS_MS = 1500;
+const POLL_CARDS_MS = 1500, POLL_STAMP_MS = 3000;   // 认卡 1.5 秒一次；卡上内容 3 秒看一次，变了就重新计算
 const STEP_CLEAN = '清理旧文件', STEP_INSTALL = '安装新文件', STEP_VERIFY = '校验';
 
 /* ---------- 框架 ---------- */
@@ -87,12 +87,19 @@ const { drawSide, nav, draw, follow } = toolShell({ state: S, api: () => api, br
 
 /* ---------- 存储卡 ---------- */
 async function watchCards() {
+  let lastStamp = 0;
   for (;;) {
     try {
       if (S.job) { /* 任务进行中不打扰 */ }
       else if (S.card) {
         const card = S.card, r = await api.card(card.path);
         if (r.error && S.card === card && !S.job) { S.notice = '存储卡已断开。再插上会自动识别。'; reset(); }
+        else if (r.card && S.stamp && S.phase !== 'run' && Date.now() - lastStamp >= POLL_STAMP_MS) {
+          lastStamp = Date.now();
+          const st = await api.card_stamp(card.path);
+          // 卡上的东西变了（装了固件、恢复了快照、在资源管理器里拷了文件）：重新读卡、重新计算
+          if (st.stamp && st.stamp !== S.stamp && S.card === card && !S.job) cardChanged(r.card);
+        }
       } else {
         const cards = await api.cards();
         // 用户点过"换一张卡"的那张不自动选回去；它被拔掉之后，下次插上照常识别
@@ -107,10 +114,16 @@ async function watchCards() {
     await sleep(POLL_CARDS_MS);
   }
 }
+function cardChanged(card) {
+  S.card = card;
+  if (S.phase === 'done') { S.phase = 'ready'; S.done = null; }
+  if (S.page === 'update' && S.phase === 'ready') draw(true);    // 先刷新卡的信息和剩余空间，计划算好后再刷一次
+  loadPlan();
+}
 function pick(card) { S.card = card; S.phase = 'ready'; S.plan = null; S.done = null; S.notice = ''; if (S.page === 'update') draw(); loadPlan(); }
 /* 用户改了勾选：如果还停在"完成"页，就回到可以再次更新的状态 */
 function replan() { if (S.phase === 'done') { S.phase = 'ready'; S.done = null; paintHero(); } loadPlan(); }
-function reset() { S.card = null; S.plan = null; S.done = null; S.phase = 'empty'; S.cards = []; S.open.clear(); S.openDirs.clear(); S.lazy.clear(); draw(); }
+function reset() { S.card = null; S.plan = null; S.stamp = null; S.done = null; S.phase = 'empty'; S.cards = []; S.open.clear(); S.openDirs.clear(); S.lazy.clear(); draw(); }
 async function pickFolder() {
   const r = await api.pick_card();
   if (r.cancelled) return;
@@ -135,8 +148,9 @@ async function loadSource(kind) {
 }
 async function loadPlan() {
   if (!S.card) return;
-  const card = S.card, plan = await api.plan(card.path);
+  const card = S.card, st = await api.card_stamp(card.path), plan = await api.plan(card.path);
   if (S.card !== card) return;
+  if (st.stamp) S.stamp = st.stamp;     // 先取指纹再算：算的过程中卡又变了，下一轮还会再算一次
   if (plan.error) { await tell('这张卡用不了', esc(plan.error)); reset(); return; }
   S.plan = plan; S.lazy.clear(); S.source = plan.source.kind === 'none' && S.source.error ? { ...plan.source, error: S.source.error } : plan.source;
   if (S.page !== 'update') return;

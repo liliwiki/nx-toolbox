@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from core import engine, firmware, package, rules, sdcard, snapshots
+from core import engine, firmware, package, patches, rules, sdcard, snapshots
 from nxhost import shared
 from nxhost.api import BaseApi
 from nxhost.jobs import Cancelled, Job
@@ -14,7 +14,8 @@ from nxhost.jobs import Cancelled, Job
 TOOL_ID = "swap"
 TOOL_NAME = "换包"
 DEFAULT_URL = "https://download.liliwiki.com/backup/xlcj/atmosphere.zip"
-DEFAULTS = {"url": DEFAULT_URL, "snapshot": True, "read_sd": True, "groups": {}, "user": {}}
+# patch_ids：读过的整合包里 exefs_patches 补丁的 Build ID，用来认出卡上哪些是系统补丁（见 core/patches.py）
+DEFAULTS = {"url": DEFAULT_URL, "snapshot": True, "read_sd": True, "groups": {}, "user": {}, "patch_ids": []}
 OPTION_KEYS = ("url", "snapshot", "read_sd")
 MAX_ITEMS = 300
 
@@ -28,9 +29,13 @@ def _label(verdict: rules.Verdict) -> tuple[str, str]:
     return "del", f"{why} · 清除"
 
 
-def _hint(card_path: str, path: str) -> str:
-    """atmosphere/contents 下的模块如果带了 toolbox.json，就用里面的名字；没有就不显示。"""
+def _hint(card_path: str, path: str, ruleset: rules.RuleSet | None = None) -> str:
+    """atmosphere/contents 下的模块如果带了 toolbox.json，就用里面的名字；没有就不显示。
+    exefs_patches 下的文件夹写上是哪个游戏的补丁、有几个。"""
     parts = path.replace("\\", "/").split("/")
+    if ruleset and len(parts) == 3 and rules.norm("/".join(parts[:2])) in patches.PATCH_DIRS:
+        info = ruleset.patch_folder(rules.norm(path))[0]
+        return patches.describe(info) if info.files else ""
     if len(parts) != 3 or [p.lower() for p in parts[:2]] != ["atmosphere", "contents"]:
         return ""
     try:
@@ -68,7 +73,8 @@ class Api(BaseApi):
     @staticmethod
     def _public(settings: dict) -> dict:
         """给页面看的设置。默认下载地址不外露，用空字符串表示"用默认的"。"""
-        return {**settings, "url": "" if settings["url"] == DEFAULT_URL else settings["url"]}
+        public = {k: v for k, v in settings.items() if k != "patch_ids"}
+        return {**public, "url": "" if settings["url"] == DEFAULT_URL else settings["url"]}
 
     def options(self) -> dict:
         return self._public(self._settings())
@@ -104,11 +110,28 @@ class Api(BaseApi):
         reason = sdcard.check_target(path)
         return {"error": reason} if reason else {"card": sdcard.info(path)}
 
+    def card_stamp(self, path: str) -> dict:
+        """卡上内容的指纹。界面隔一会儿取一次，变了就重新计算要清哪些；有任务在跑时不取，免得和任务抢卡。"""
+        if self._busy():
+            return {"busy": True}
+        try:
+            return {"stamp": sdcard.stamp(path)} if os.path.isdir(path) else {"error": "这个位置不存在"}
+        except OSError as exc:
+            return {"error": str(exc)}
+
     def eject(self, path: str) -> dict:
         ok, message = sdcard.eject(path)
         return {"ok": ok, "message": message}
 
     # ---- 整合包来源 ----
+
+    def _learn_patches(self) -> None:
+        """记下这个整合包带的系统补丁的 Build ID。以后只清理、或者换成别家的包时，也认得出卡上旧的系统补丁。"""
+        ids = patches.package_ids(self._listing.files) if self._listing else set()
+        known = self._settings()["patch_ids"]
+        new = sorted(ids - set(known))
+        if new:
+            self._save(patch_ids=(known + new)[-patches.MAX_LEARNED:])
 
     def _source_state(self) -> dict:
         listing = self._listing
@@ -136,6 +159,7 @@ class Api(BaseApi):
                 self._listing = package.list_local(path)
             else:
                 self._listing = None
+            self._learn_patches()
         except Exception as exc:
             self._source_error = f"读不到整合包的内容：{exc}"
         return self._source_state()
@@ -158,7 +182,7 @@ class Api(BaseApi):
             black += [(p, "整合包") for p in self._listing.lists["black"]]
         files = self._listing.files if self._listing else None
         return rules.RuleSet(settings["groups"], settings["user"], white, black, files, sdcard.is_card(card_path),
-                              root=card_path)
+                              root=card_path, known_patch_ids=set(settings["patch_ids"]))
 
     def plan(self, card_path: str) -> dict:
         reason = sdcard.check_target(card_path)
@@ -175,10 +199,10 @@ class Api(BaseApi):
             for node in mine[:MAX_ITEMS]:
                 cls, text = _label(node.verdict)
                 items.append({"path": node.path, "dir": node.is_dir, "keep": node.verdict.keep, "cls": cls, "text": text,
-                              "hint": _hint(card_path, node.path), "fixed": node.verdict.why == "pc"})
+                              "hint": _hint(card_path, node.path, ruleset), "fixed": node.verdict.why == "pc"})
             if meta["id"] == "rest" and not ruleset.card:
                 # 不是存储卡：白名单以外的也不动，这一组只是列出来，不能改
-                meta = {**meta, "kind": "keep", "fixed": True, "desc": "这里不是可移动存储卡，白名单以外的也不会清理"}
+                meta = {**meta, "kind": "keep", "fixed": True, "desc": "不是存储卡，只更新整合包里的文件"}
             groups.append({**meta, **_outcome(mine), "count": len(mine), "items": items,
                            "more": max(0, len(mine) - MAX_ITEMS)})
         deletes = [n for n in nodes if not n.verdict.keep]
@@ -230,7 +254,7 @@ class Api(BaseApi):
             verdict = ruleset.evaluate(rules.norm(rel))
             cls, text = _label(verdict)
             result.append({"path": rel, "dir": entry.is_dir(follow_symlinks=False), "keep": verdict.keep,
-                           "cls": cls, "text": text, "hint": _hint(card_path, rel), "fixed": verdict.why == "pc"})
+                           "cls": cls, "text": text, "hint": _hint(card_path, rel, ruleset), "fixed": verdict.why == "pc"})
         return result
 
     def clear_rule(self, path: str) -> dict:

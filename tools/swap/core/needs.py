@@ -41,7 +41,14 @@ ROM_EXTRA = ("bin", "m3u", "cci", "cxi", "3dsx", "wad", "gcz", "ciso", "swf", "p
 
 SKIP_ROOTS = ("emummc", "nintendo", "atmosphere", "bootloader", "config")   # 找游戏资源时不进这些文件夹
 CONTENTS = "atmosphere/contents"
-MOD_DIRS = ("cheats", "romfs", "exefs")
+# atmosphere/contents/<程序编号>/ 下面大气层认的东西（按大气层源码核对）：
+#   cheats/<Build ID 前 16 位>.txt   金手指（dmnt）；cheats/toggles.txt 是开关记录，光有它没用
+#   romfs/、romfs.bin              LayeredFS 替换游戏资源（ams_mitm）；romfs_metadata.bin 是它自己生成的缓存
+#   exefs/                         替换程序本体的散文件（loader），游戏 MOD（比如 Skyline 插件框架）会用
+#   exefs.nsp、flags/boot2.flag、mitm.lst   系统模块（插件）
+MOD_DIRS = ("romfs", "exefs")
+CHEAT_FILE = re.compile(r"^[0-9a-f]{16}\.txt$")
+MODULE_FILES = ("exefs.nsp", "mitm.lst", "flags/boot2.flag")
 LINUX_INI = re.compile(r"l4t|switchroot|android|lineage|ubuntu|lakka|fedora", re.I)
 EMU_ALL = "*"
 ROMS = "@rom"     # 档案里代表"模拟器游戏的扩展名和压缩包"
@@ -151,6 +158,8 @@ REASONS = {
     "notlinux": "不是安卓和 Linux 的启动项",
     "module": "旧的系统模块，新整合包会重装",
     "nomod": "里面没有金手指和 MOD",
+    "syspatch": "整合包带的系统补丁，换包时会重装",
+    "nopatch": "里面没有补丁文件",
     "front": "插件前端，不是游戏",
     "plugmedia": "插件自带的音乐、视频",
 }
@@ -389,13 +398,24 @@ class Needs:
             return None     # 是文件夹或读不了，不乱删
         return None if LINUX_INI.search(text) else "notlinux"
 
+    @staticmethod
+    def _has_cheats(folder: str) -> bool:
+        """大气层只读 cheats/<Build ID 前 16 位>.txt，别的文件（toggles.txt、说明）不算金手指。"""
+        try:
+            with os.scandir(folder) as entries:
+                return any(CHEAT_FILE.match(e.name.lower()) and e.is_file() and e.stat().st_size > 0 for e in entries)
+        except OSError:
+            return False
+
     def _content(self, entry: str) -> str | None:
         """atmosphere/contents/<编号>：游戏的金手指和 MOD 留，系统模块和空的清。"""
         full = self._full(entry)
         if not os.path.isdir(full):
             return "nomod"
-        if os.path.exists(os.path.join(full, "exefs.nsp")) or os.path.exists(os.path.join(full, "flags", "boot2.flag")):
+        if any(os.path.exists(os.path.join(full, *f.split("/"))) for f in MODULE_FILES):
             return "module"
         if any(self.has_data(f"{entry}/{d}") for d in MOD_DIRS if os.path.isdir(os.path.join(full, d))):
+            return None
+        if self.has_data(f"{entry}/romfs.bin", PLAIN) or self._has_cheats(os.path.join(full, "cheats")):
             return None
         return "nomod"

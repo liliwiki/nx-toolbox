@@ -34,14 +34,35 @@ def nsp(names: list[str]) -> bytes:
     return head + entries + table
 
 
+MOD_ID, PCH_ID = "1EC9082CB52ECAF561EE45BC00FF318E9912232B", "AABBCCDDEEFF00112233445566778899"
+ES_ID, PACK_ID = "C70E4A0C8B0F27C50E9D10F7A6A3E1F4", "D1D2D3D4D5D6D7D8D9DADBDCDDDEDFE0"
+
+
 def build_card(root: Path) -> None:
     files = {
         "atmosphere/package3": b"PK31" + bytes(60),
         "atmosphere/whitelist.txt": "switch/MyTool\n",
         "atmosphere/blacklist.txt": "config/sys-clk\n",
-        "atmosphere/contents/0100F2C0115B6000/cheats/abc.txt": "cheat",
+        "atmosphere/contents/0100F2C0115B6000/cheats/0123456789ABCDEF.txt": "[60fps]\n04000000 0 0",
+        "atmosphere/contents/0100F2C0115B6000/cheats/toggles.txt": "[60fps]\ntrue",
+        "atmosphere/contents/0100CCCC00000000/cheats/toggles.txt": "[60fps]\ntrue",
+        "atmosphere/contents/0100CCCC00000000/cheats/readme.txt": "read me",
+        "atmosphere/contents/0100CCCC00000000/romfs_metadata.bin": "cache",
+        "atmosphere/contents/0100DDDD00000000/romfs.bin": "romfs",
+        "atmosphere/contents/0100EEEE00000000/mitm.lst": "set",
+        "atmosphere/contents/0100EEEE00000000/exefs/main": "nso",
+        f"atmosphere/nro_patches/Smash 60fps/{MOD_ID}.ips": b"PATCH\0\0\0EOF",
+        "atmosphere/saves/sysmmc/user/account/0100F2C0115B6000/save.bin": "save",
+        "atmosphere/hosts/emummc.txt": "127.0.0.1 *nintendo*",
+        "atmosphere/erpt_reports/report.log": "x",
         "atmosphere/contents/420000000007E51A/exefs.nsp": "black",
         "atmosphere/contents/0100BBBB00000000/exefs.nsp": "old module",
+        f"atmosphere/exefs_patches/塞尔达传说 王国之泪 画质/{MOD_ID}.ips": b"PATCH\0\0\0EOF",
+        "atmosphere/exefs_patches/TOTK 60fps/1.2.1.pchtxt": f"@nsobid-{PCH_ID}\n# Zelda TotK 1.2.1 60fps\n@enabled\n",
+        f"atmosphere/exefs_patches/es_patches/{ES_ID}.ips": b"PATCHsigEOF",
+        f"atmosphere/exefs_patches/MyPack sig/{PACK_ID}.ips": b"IPS32sigEEOF",
+        "atmosphere/exefs_patches/empty_mod/log.txt": "log",
+        "atmosphere/exefs_patches/fake/0123456789ABCDEF.ips": "not an ips",
         "bootloader/hekate_ipl.ini": "[config]",
         "bootloader/ini/android.ini": "[Android]\npayload=switchroot/android/coreboot.rom\n",
         "bootloader/ini/other.ini": "[Other]\npayload=bootloader/payloads/x.bin\n",
@@ -78,9 +99,22 @@ EXPECTED = {
     "atmosphere/package3": DEL,                                        # 其余一律清除
     "atmosphere/whitelist.txt": KEEP,                                  # 名单文件本身留着
     "atmosphere/contents/0100F2C0115B6000": KEEP,                      # 金手指
+    "atmosphere/contents/0100CCCC00000000": DEL,                       # 只有开关记录、说明和缓存，没有金手指
+    "atmosphere/contents/0100DDDD00000000": KEEP,                      # romfs.bin 也是 MOD
+    "atmosphere/contents/0100EEEE00000000": DEL,                       # 有 mitm.lst 的是系统模块
+    "atmosphere/nro_patches/smash 60fps": KEEP,
+    "atmosphere/saves": KEEP,                                          # 大气层转存到卡上的游戏存档
+    "atmosphere/hosts": KEEP,
+    "atmosphere/erpt_reports": DEL,
     "atmosphere/contents/420000000007E51A": DEL,                       # 黑名单
     "atmosphere/contents/0100BBBB00000000": DEL,                       # 旧的系统模块
     "atmosphere/contents/0100AAAA00000000": DEL,                       # 只有空文件夹，没有 MOD
+    "atmosphere/exefs_patches/塞尔达传说 王国之泪 画质": KEEP,          # 有 ips 补丁，名字随便起
+    "atmosphere/exefs_patches/totk 60fps": KEEP,                       # 只有 pchtxt 也算
+    "atmosphere/exefs_patches/es_patches": DEL,                        # 签名补丁
+    "atmosphere/exefs_patches/mypack sig": KEEP,                       # 认不出来的按 MOD 留（见下面的测试）
+    "atmosphere/exefs_patches/empty_mod": DEL,                         # 只有日志
+    "atmosphere/exefs_patches/fake": DEL,                              # 文件名像，内容不是 IPS
     "bootloader/hekate_ipl.ini": DEL,
     "bootloader/ini/android.ini": KEEP,                                # 有 switchroot 的安卓启动项
     "bootloader/ini/other.ini": DEL,                                   # 不是安卓和 Linux 的启动项
@@ -114,6 +148,11 @@ def wait(timeout: float = 60) -> dict:
     raise TimeoutError("任务没有结束")
 
 
+def rules_listing(files: list[str]):
+    from core import package
+    return package.Listing("local", "x.zip", files=files)
+
+
 class CardTest(unittest.TestCase):
     """假扮成存储卡的文件夹。"""
 
@@ -121,7 +160,7 @@ class CardTest(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp(prefix="nxswap_card_"))
         build_card(self.root)
         os.environ[sdcard.FAKE_SD_ENV] = str(self.root)
-        api._save(groups={}, user={})
+        api._save(groups={}, user={}, patch_ids=[])
         api.use_source("none")
         self.card = str(self.root)
 
@@ -141,6 +180,42 @@ class RulesOnCardTest(CardTest):
         for path, keep in EXPECTED.items():
             with self.subTest(path=path):
                 self.assertEqual(self.verdict(path), keep)
+
+    def test_system_patches_found_by_build_id(self):
+        """文件夹改了名的系统补丁：新整合包里有同一个 Build ID（哪个文件夹都行），或者以前读过的包里见过。"""
+        folder = rules.norm("atmosphere/exefs_patches/MyPack sig")
+        by_package = rules.RuleSet({}, {}, [], [], [f"atmosphere/exefs_patches/sigpatch/{PACK_ID[:24]}0000.ips"], root=self.card)
+        self.assertFalse(by_package.evaluate(folder).keep)
+        self.assertEqual(by_package.evaluate(folder).why, "syspatch")
+        learned = rules.RuleSet({}, {}, [], [], None, root=self.card, known_patch_ids={PACK_ID[:16].lower()})
+        self.assertFalse(learned.evaluate(folder).keep)
+        self.assertTrue(learned.evaluate(rules.norm("atmosphere/exefs_patches/塞尔达传说 王国之泪 画质")).keep)
+
+    def test_blacklisted_patch_folder_keeps_game_mods(self):
+        """整合包和卡上的旧名单常把整个 exefs_patches 拉黑：系统补丁照清，游戏 MOD 照留。"""
+        write(self.root, "atmosphere/blacklist.txt", "atmosphere/exefs_patches\natmosphere/nro_patches\n")
+        self.assertTrue(self.verdict("atmosphere/exefs_patches/塞尔达传说 王国之泪 画质"))
+        self.assertTrue(self.verdict("atmosphere/exefs_patches/TOTK 60fps"))
+        self.assertTrue(self.verdict("atmosphere/nro_patches/Smash 60fps"))
+        self.assertFalse(self.verdict("atmosphere/exefs_patches/es_patches"))
+        self.assertFalse(self.verdict("atmosphere/exefs_patches/fake"))
+        nodes = self.nodes()
+        self.assertNotIn("atmosphere/exefs_patches", nodes, "要往里走，不能整个当一项清掉")
+        self.assertTrue(nodes["atmosphere/exefs_patches/塞尔达传说 王国之泪 画质"])
+        self.assertFalse(nodes["atmosphere/exefs_patches/es_patches"])
+
+    def test_patch_hint_and_learning(self):
+        items = {i["path"].replace("\\", "/"): i for g in api.plan(self.card)["groups"] for i in g["items"]}
+        self.assertEqual(items["atmosphere/exefs_patches/TOTK 60fps"]["hint"], "Zelda TotK 1.2.1 60fps · 1 个补丁")
+        self.assertEqual(items["atmosphere/exefs_patches/塞尔达传说 王国之泪 画质"]["hint"], "1 个补丁")
+        api._listing = rules_listing([f"atmosphere/exefs_patches/es_patches/{PACK_ID}.ips"])
+        try:
+            api._learn_patches()
+            self.assertIn(PACK_ID[:16].lower(), api._settings()["patch_ids"])
+            self.assertNotIn("patch_ids", api.options())
+        finally:
+            api._listing = None
+            api._save(patch_ids=[])
 
     def test_scan_matches_and_skips_windows_folders(self):
         nodes = self.nodes()
@@ -192,8 +267,13 @@ class RulesOnCardTest(CardTest):
         ("mods2 有 MOD", [], {"mods2/Zelda/60fps/romfs/a.bin": "m"}, {"mods2": KEEP}),
         ("switchroot 只剩日志", ["switchroot"], {"switchroot/logs/boot.txt": "l"},
          {"switchroot": DEL, "bootloader/ini/android.ini": DEL}),
-        ("金手指是 0 字节", [], {"atmosphere/contents/0100CCCC00000000/cheats/abc.txt": b""},
-         {"atmosphere/contents/0100CCCC00000000": DEL}),
+        ("金手指是 0 字节", [], {"atmosphere/contents/0100CCCC11110000/cheats/0123456789ABCDEF.txt": b""},
+         {"atmosphere/contents/0100CCCC11110000": DEL}),
+        ("金手指文件名不是 Build ID", [], {"atmosphere/contents/0100CCCC22220000/cheats/60fps.txt": "c"},
+         {"atmosphere/contents/0100CCCC22220000": DEL}),
+        ("只有 romfs 缓存", [], {"atmosphere/contents/0100CCCC33330000/romfs_metadata.bin": "c"},
+         {"atmosphere/contents/0100CCCC33330000": DEL}),
+        ("转存的存档文件夹是空的", ["atmosphere/saves"], {"atmosphere/saves/sysmmc": None}, {"atmosphere/saves": DEL}),
         ("RetroArch 只有配置，卡上没有游戏", ["roms"], {"retroarch/config/retroarch.cfg": "c"}, {"retroarch": DEL}),
         ("RetroArch 游戏删了，存档还在", ["roms"], {"retroarch/saves/pokemon.srm": "s"}, {"retroarch": KEEP}),
         ("RetroArch 只剩自动即时存档", ["roms"], {"retroarch/cores/savestates/mario.state.auto": "s"},
@@ -356,7 +436,7 @@ class NotACardTest(unittest.TestCase):
         os.environ.pop(sdcard.FAKE_SD_ENV, None)
         self.root = Path(tempfile.mkdtemp(prefix="nxswap_folder_"))
         build_card(self.root)
-        api._save(groups={}, user={})
+        api._save(groups={}, user={}, patch_ids=[])
         api.use_source("none")
         self.card = str(self.root)
 
